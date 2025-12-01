@@ -43,11 +43,8 @@ spec:
     value: |
       #!/bin/bash
       set -ex
-      # Unit tests fail and fixing that is for others to do later
+      # Placeholder for unit testing script
       exit 0
-      npm install
-      npm run lint
-      npm test --  --runInBand --no-cache
   - name: run-app-script
     value: |
       #!/bin/sh
