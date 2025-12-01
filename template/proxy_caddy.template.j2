@@ -19,11 +19,13 @@ handle /apps/chrome* {
 handle /apps/{{ app_name }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
-{% for route_prefix in route_prefixes %}
-handle /{{ route_prefix }}/{{ app_name }}* {
+{% for route_path in route_prefixes %}
+handle {{ route_path }}* {
     reverse_proxy 127.0.0.1:{{ chrome_port }}
 }
 {% endfor %}
+
+# Catch all for paths that don't match
 handle /{{ app_name }}* {
     reverse_proxy 127.0.0.1:{{ chrome_port }}
 }

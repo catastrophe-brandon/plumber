@@ -1,5 +1,69 @@
 import argparse
+import json
 import os
+
+from jinja2 import Environment, FileSystemLoader
+
+
+def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str] | None:
+    """
+    Extract the appUrl from fec.config.js file.
+
+    Args:
+        config_path: Path to the fec.config.js file (default: "fec.config.js")
+
+    Returns:
+        The appUrl value from fec.config.js, or None if not found
+
+    Raises:
+        FileNotFoundError: If fec.config.js is not found
+    """
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"fec.config.js not found at: {config_path}")
+
+    # Read and parse the fec.config.js file as JSON
+    with open(config_path) as f:
+        config = json.load(f)
+
+    # Get appUrl from the config object
+    return config.get("appUrl")
+
+
+def generate_frontend_proxy_caddyfile(
+    app_url_value: list[str],
+    app_name: str,
+    app_port: str = "8000",
+    chrome_port: str = "9912",
+    template_path: str = "template/proxy_caddy.template.j2",
+) -> str:
+    """
+    Generate a Caddyfile configuration for the frontend proxy.
+
+    Args:
+        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
+        app_name: Name of the application
+        app_port: Port for the application (default: "8000")
+        chrome_port: Port for chrome resources (default: "9912")
+        template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
+
+    Returns:
+        Rendered Caddyfile configuration as a string
+    """
+    # Set up Jinja2 environment
+    template_dir = os.path.dirname(template_path)
+    template_file = os.path.basename(template_path)
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template(template_file)
+
+    # Render the template with app_url_value routes
+    rendered = template.render(
+        app_name=app_name,
+        app_port=app_port,
+        chrome_port=chrome_port,
+        route_prefixes=app_url_value,
+    )
+
+    return rendered
 
 
 def generate_pipeline_from_template(

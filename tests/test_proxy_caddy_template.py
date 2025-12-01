@@ -10,18 +10,18 @@ def test_proxy_caddy_template_rendering():
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("proxy_caddy.template.j2")
 
-    # Test values
+    # Test values - route_prefixes now contains full paths
     test_vars = {
         "app_name": "test-application",
         "app_port": "8000",
         "chrome_port": "9912",
         "route_prefixes": [
-            "settings",
-            "openshift",
-            "ansible",
-            "insights",
-            "edge",
-            "iam",
+            "/settings/test-application",
+            "/openshift/test-application",
+            "/ansible/test-application",
+            "/insights/test-application",
+            "/edge/test-application",
+            "/iam/test-application",
         ],
     }
 
@@ -44,10 +44,10 @@ def test_proxy_caddy_template_rendering():
     assert "reverse_proxy 127.0.0.1:8000" in rendered, "App port proxy not found"
     assert "reverse_proxy 127.0.0.1:9912" in rendered, "Chrome port proxy not found"
 
-    # Verify all route prefixes were rendered
-    for prefix in test_vars["route_prefixes"]:
-        expected_route = f"handle /{prefix}/test-application*"
-        assert expected_route in rendered, f"Route prefix '{prefix}' not found in output"
+    # Verify all routes from route_prefixes were rendered
+    for route_path in test_vars["route_prefixes"]:
+        expected_route = f"handle {route_path}*"
+        assert expected_route in rendered, f"Route path '{route_path}' not found in output"
 
     # Verify root and index.html routes
     assert "@root path /" in rendered
@@ -67,12 +67,12 @@ def test_proxy_caddy_template_with_different_app():
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("proxy_caddy.template.j2")
 
-    # Different test values
+    # Different test values - route_prefixes now contains full paths
     test_vars = {
         "app_name": "my-custom-app",
         "app_port": "3000",
         "chrome_port": "4000",
-        "route_prefixes": ["settings", "insights"],
+        "route_prefixes": ["/settings/my-custom-app", "/insights/my-custom-app"],
     }
 
     rendered = template.render(test_vars)
@@ -85,11 +85,11 @@ def test_proxy_caddy_template_with_different_app():
     assert "3000" in rendered
     assert "4000" in rendered
 
-    # Verify only the specified route prefixes are present
+    # Verify only the specified route paths are present
     assert "handle /settings/my-custom-app*" in rendered
     assert "handle /insights/my-custom-app*" in rendered
 
-    # Verify route prefixes not in the list are not present
+    # Verify route paths not in the list are not present
     assert "handle /ansible/my-custom-app*" not in rendered
     assert "handle /edge/my-custom-app*" not in rendered
 
@@ -104,7 +104,7 @@ def test_proxy_caddy_template_route_count():
         "app_name": "test-app",
         "app_port": "8000",
         "chrome_port": "9912",
-        "route_prefixes": ["settings", "openshift", "ansible"],
+        "route_prefixes": ["/settings", "/openshift", "/ansible"],
     }
 
     rendered = template.render(test_vars)
@@ -117,7 +117,7 @@ def test_proxy_caddy_template_route_count():
     # 2. /index.html
     # 3. /apps/chrome*
     # 4. /apps/{app_name}*
-    # 5-7. /{prefix}/{app_name}* (3 prefixes)
+    # 5-7. route_paths (3 paths)
     # 8. /{app_name}*
     # Total: 8 handles
     expected_count = 8
