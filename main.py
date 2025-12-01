@@ -67,16 +67,22 @@ def generate_frontend_proxy_caddyfile(
 
 
 def generate_pipeline_from_template(
-    pipeline_template_path: str, app_name: str, repo_url: str
+    pipeline_template_path: str,
+    app_name: str,
+    repo_url: str,
+    app_caddy_file: str,
+    proxy_caddy_file: str,
 ) -> str:
     """
-    Read a pipeline template file, substitute app_name and repo_url,
+    Read a pipeline template file, substitute app_name, repo_url, and Caddyfile contents,
     and write to a temporary location.
 
     Args:
         pipeline_template_path: Path to the pipeline template YAML file
         app_name: Name of the application to substitute into the template
         repo_url: Git repository URL to substitute into the template
+        app_caddy_file: Contents of the application Caddyfile
+        proxy_caddy_file: Contents of the proxy Caddyfile
 
     Returns:
         Path to the generated pipeline file in /tmp
@@ -88,6 +94,8 @@ def generate_pipeline_from_template(
     # Perform substitutions
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
+    substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_file)
+    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_file)
 
     # Create output file in /tmp
     output_filename = f"{app_name}-pipeline.yaml"
@@ -106,8 +114,14 @@ def main(app_name: str, repo_url: str, pipeline_template: str):
     print(f"Repo URL: {repo_url}")
     print(f"Pipeline Template: {pipeline_template}")
 
+    # TODO: Generate these from templates
+    app_caddy_file = "# App Caddyfile placeholder"
+    proxy_caddy_file = "# Proxy Caddyfile placeholder"
+
     # Generate pipeline from template
-    output_path = generate_pipeline_from_template(pipeline_template, app_name, repo_url)
+    output_path = generate_pipeline_from_template(
+        pipeline_template, app_name, repo_url, app_caddy_file, proxy_caddy_file
+    )
     print(f"\nGenerated pipeline file: {output_path}")
 
 

@@ -48,7 +48,7 @@ python main.py <app_name> <repo_url> <pipeline_template>
 
 **Example:**
 ```bash
-python main.py learning-resources https://github.com/RedHatInsights/learning-resources.git template/template.yaml
+python main.py learning-resources https://github.com/RedHatInsights/learning-resources.git template/pipeline_template.yaml
 ```
 
 ### Python API
@@ -59,7 +59,7 @@ python main.py learning-resources https://github.com/RedHatInsights/learning-res
 from main import generate_pipeline_from_template
 
 output_path = generate_pipeline_from_template(
-    pipeline_template_path="template/template.yaml",
+    pipeline_template_path="template/pipeline_template.yaml",
     app_name="my-app",
     repo_url="https://github.com/user/repo.git"
 )

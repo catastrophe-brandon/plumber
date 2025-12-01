@@ -53,14 +53,21 @@ spec:
       #!/bin/sh
       set -e
 
-      echo "Creating empty Caddyfile..."
-
-      # Create an empty Caddyfile (to be populated by plumber)
-      touch /etc/caddy/Caddyfile
-
+      echo "Creating Caddyfile..."
+      cat > /etc/caddy/Caddyfile << CADDY_EOF
+      {{app_caddy_file}}
+      CADDY_EOF
+      
       echo "Starting application with Caddy..."
       # Start Caddy with the configuration
       exec caddy run --config /etc/caddy/Caddyfile
+  - name: proxy-routes-script
+    value: |
+      #!/bin/sh
+      set -e
+      cat << PROXY_ROUTES_EOF
+      {{proxy_caddy_file}}
+      PROXY_ROUTES_EOF
   - name: e2e-tests-script
     value: |
       #!/bin/bash

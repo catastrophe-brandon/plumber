@@ -19,6 +19,12 @@ spec:
     value: {{app_name}}
   - name: git-url
     value: {{repo_url}}
+  - name: app-caddy
+    value: |
+      {{app_caddy_file}}
+  - name: proxy-caddy
+    value: |
+      {{proxy_caddy_file}}
 """
 
     # Create a temporary template file
@@ -30,9 +36,13 @@ spec:
         # Test values
         test_app_name = "test-application"
         test_repo_url = "https://github.com/test/repo.git"
+        test_app_caddy = "# App Caddyfile"
+        test_proxy_caddy = "# Proxy Caddyfile"
 
         # Call the function
-        output_path = generate_pipeline_from_template(template_path, test_app_name, test_repo_url)
+        output_path = generate_pipeline_from_template(
+            template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddy
+        )
 
         # Verify the output file was created
         assert os.path.exists(output_path), f"Output file not created at {output_path}"
@@ -70,6 +80,8 @@ def test_generate_pipeline_from_template_with_special_characters():
     """Test that the function handles app names with hyphens and underscores."""
     test_template_content = """name: {{app_name}}
 repo: {{repo_url}}
+app_caddy: {{app_caddy_file}}
+proxy_caddy: {{proxy_caddy_file}}
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as temp_template:
@@ -79,14 +91,20 @@ repo: {{repo_url}}
     try:
         test_app_name = "my-test_app-123"
         test_repo_url = "https://github.com/org/my-repo_name.git"
+        test_app_caddy = "# App config"
+        test_proxy_caddy = "# Proxy config"
 
-        output_path = generate_pipeline_from_template(template_path, test_app_name, test_repo_url)
+        output_path = generate_pipeline_from_template(
+            template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddy
+        )
 
         with open(output_path) as f:
             output_content = f.read()
 
         assert test_app_name in output_content
         assert test_repo_url in output_content
+        assert test_app_caddy in output_content
+        assert test_proxy_caddy in output_content
 
         # Clean up
         os.remove(output_path)
