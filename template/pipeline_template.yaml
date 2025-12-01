@@ -1,0 +1,132 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  annotations:
+    build.appstudio.openshift.io/repo: {{repo_url}}?rev={{revision}}
+    build.appstudio.redhat.com/commit_sha: '{{revision}}'
+    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
+    build.appstudio.redhat.com/target_branch: '{{target_branch}}'
+    pipelinesascode.tekton.dev/max-keep-runs: "3"
+    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
+      == "master"
+    pipelinesascode.tekton.dev/pipeline: https://github.com/catastrophe-brandon/konflux-pipelines/raw/btweed/platform-ui-e2e/pipelines/platform-ui/docker-build-run-all-tests.yaml
+  creationTimestamp: null
+  labels:
+    appstudio.openshift.io/application: {{app_name}}
+    appstudio.openshift.io/component: {{app_name}}
+    pipelines.appstudio.openshift.io/type: build
+  name: {{app_name}}-on-pull-request
+  namespace: hcc-platex-services-tenant
+spec:
+  params:
+  - name: git-url
+    value: '{{source_url}}'
+  - name: revision
+    value: '{{revision}}'
+  - name: output-image
+    value: quay.io/redhat-user-workloads/hcc-platex-services-tenant/{{app_name}}/{{app_name}}:on-pr-{{revision}}
+  - name: image-expires-after
+    value: 5d
+  - name: dockerfile
+    value: build-tools/Dockerfile
+  - name: path-context
+    value: .
+  - name: rebuild
+    value: "true"
+  - name: test-app-name
+    value: {{app_name}}
+  - name: test-app-port
+    value: "8000"
+  - name: chrome-port
+    value: "9912"
+  - name: unit-tests-script
+    value: |
+      #!/bin/bash
+      set -ex
+      # Placeholder for unit testing script
+      exit 0
+  - name: run-app-script
+    value: |
+      #!/bin/sh
+      set -e
+
+      echo "Creating Caddyfile..."
+      cat > /etc/caddy/Caddyfile << CADDY_EOF
+      {{app_caddy_file}}
+      CADDY_EOF
+      
+      echo "Starting application with Caddy..."
+      # Start Caddy with the configuration
+      exec caddy run --config /etc/caddy/Caddyfile
+  - name: proxy-routes-script
+    value: |
+      #!/bin/sh
+      set -e
+      cat << PROXY_ROUTES_EOF
+      {{proxy_caddy_file}}
+      PROXY_ROUTES_EOF
+  - name: e2e-tests-script
+    value: |
+      #!/bin/bash
+      set -ex
+      getent hosts stage.foo.redhat.com
+      timeout 120s bash -c 'until curl -k https://stage.foo.redhat.com:1337 > /dev/null 2>&1; do
+        echo "Waiting for dev server to be ready"
+        sleep 5
+      done'
+      echo "Dev server ready!"
+
+      # Clone fresh from git instead of using trusted artifact
+      echo "Cloning repository for tests..."
+      cd /tmp
+
+      git clone {{source_url}} test-repo
+      cd test-repo
+      git checkout {{revision}}
+      echo "Installing dependencies..."
+      npm install
+
+      echo "Installing Playwright browsers..."
+      npx playwright install --with-deps
+
+      echo "Running Playwright tests ..."
+      npx playwright test
+  pipelineRef:
+    resolver: git
+    params:
+    - name: url
+      value: https://github.com/catastrophe-brandon/konflux-pipelines
+    - name: revision
+      value: btweed/platform-ui-e2e
+    - name: pathInRepo
+      value: pipelines/platform-ui/docker-build-run-all-tests.yaml
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-{{app_name}}
+  taskRunSpecs:
+    - pipelineTaskName: run-e2e-tests
+      serviceAccountName: build-pipeline-{{app_name}}
+      podTemplate:
+        # Override /etc/hosts to redirect stage.foo.redhat.com to localhost
+        hostAliases:
+          - ip: "::1"
+            hostnames:
+              - "stage.foo.redhat.com"
+          - ip: "127.0.0.1"
+            hostnames:
+              - "stage.foo.redhat.com"
+  workspaces:
+  - name: workspace
+    volumeClaimTemplate:
+      metadata:
+        creationTimestamp: null
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      status: {}
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
