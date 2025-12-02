@@ -21,12 +21,35 @@ def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str]
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"fec.config.js not found at: {config_path}")
 
-    # Read and parse the fec.config.js file as JSON
+    # Read the file
     with open(config_path) as f:
-        config = json.load(f)
+        content = f.read()
 
-    # Get appUrl from the config object
-    return config.get("appUrl")
+    # Find appUrl: [ ... ] pattern
+    start_marker = "appUrl:"
+    start = content.find(start_marker)
+    if start == -1:
+        return None
+
+    # Find the opening bracket
+    bracket_start = content.find("[", start)
+    if bracket_start == -1:
+        return None
+
+    # Find the matching closing bracket
+    bracket_end = content.find("]", bracket_start)
+    if bracket_end == -1:
+        return None
+
+    # Extract the array content and convert to valid JSON
+    array_content = content[bracket_start : bracket_end + 1]
+    # Replace single quotes with double quotes for JSON compatibility
+    # This handles JavaScript string literals which can use single quotes
+    array_content = array_content.replace("'", '"')
+    # Remove trailing commas (JavaScript allows them, JSON doesn't)
+    import re
+    array_content = re.sub(r',(\s*])', r'\1', array_content)
+    return json.loads(array_content)
 
 
 def generate_frontend_proxy_caddyfile(
@@ -91,11 +114,17 @@ def generate_pipeline_from_template(
     with open(pipeline_template_path) as f:
         template_content = f.read()
 
+    # Add proper indentation to Caddyfile contents for YAML multiline strings
+    # The template uses 6 spaces of indentation for content inside heredocs
+    indent = "      "
+    app_caddy_indented = "\n".join(indent + line if line else "" for line in app_caddy_file.split("\n"))
+    proxy_caddy_indented = "\n".join(indent + line if line else "" for line in proxy_caddy_file.split("\n"))
+
     # Perform substitutions
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
-    substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_file)
-    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_file)
+    substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_indented)
+    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_indented)
 
     # Create output file in /tmp
     output_filename = f"{app_name}-pipeline.yaml"
@@ -108,15 +137,38 @@ def generate_pipeline_from_template(
     return output_path
 
 
-def main(app_name: str, repo_url: str, pipeline_template: str):
+def run_plumber(
+    app_name: str, repo_url: str, pipeline_template: str, fec_config_path: str = "fec.config.js"
+):
     print("Hello from plumber!")
     print(f"App Name: {app_name}")
     print(f"Repo URL: {repo_url}")
     print(f"Pipeline Template: {pipeline_template}")
 
-    # TODO: Generate these from templates
-    app_caddy_file = "# App Caddyfile placeholder"
-    proxy_caddy_file = "# Proxy Caddyfile placeholder"
+    # Default ports
+    app_port = "8000"
+    chrome_port = "9912"
+
+    # Try to get appUrl from fec.config.js
+    try:
+        app_url_value = get_app_url_from_fec_config(fec_config_path)
+        print(f"Found appUrl in {fec_config_path}: {app_url_value}")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Warning: Could not read {fec_config_path} ({e}), using default routes")
+        app_url_value = [f"/{app_name}"]
+
+    # Generate proxy Caddyfile
+    proxy_caddy_file = generate_frontend_proxy_caddyfile(
+        app_url_value=app_url_value,
+        app_name=app_name,
+        app_port=app_port,
+        chrome_port=chrome_port,
+    )
+    print("\nGenerated proxy Caddyfile:")
+    print(proxy_caddy_file)
+
+    # Generate app Caddyfile (currently empty template, but keep for future use)
+    app_caddy_file = "# App Caddyfile - not yet implemented"
 
     # Generate pipeline from template
     output_path = generate_pipeline_from_template(
@@ -125,11 +177,21 @@ def main(app_name: str, repo_url: str, pipeline_template: str):
     print(f"\nGenerated pipeline file: {output_path}")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
     parser.add_argument("app_name", type=str, help="Name of the application")
     parser.add_argument("repo_url", type=str, help="Git URL of the repository")
     parser.add_argument("pipeline_template", type=str, help="Path to the pipeline template file")
+    parser.add_argument(
+        "--fec-config",
+        type=str,
+        default="fec.config.js",
+        help="Path to fec.config.js file (default: fec.config.js)",
+    )
 
     args = parser.parse_args()
-    main(args.app_name, args.repo_url, args.pipeline_template)
+    run_plumber(args.app_name, args.repo_url, args.pipeline_template, args.fec_config)
+
+
+if __name__ == "__main__":
+    main()
