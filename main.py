@@ -89,6 +89,71 @@ def generate_frontend_proxy_caddyfile(
     return rendered
 
 
+def generate_app_caddyfile(
+    app_url_value: list[str],
+    app_name: str,
+    app_port: str = "8000",
+) -> str:
+    """
+    Generate a Caddyfile configuration for the application server.
+
+    This creates Caddy route handlers that serve the static application files
+    from /srv/dist for each route in appUrl.
+
+    Args:
+        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
+        app_name: Name of the application
+        app_port: Port for the application (default: "8000")
+
+    Returns:
+        Rendered Caddyfile configuration as a string
+    """
+    # Start with the server block
+    lines = [f":{app_port} {{"]
+
+    # Generate route handlers for each app URL
+    for route in app_url_value:
+        # Generate matcher name from route (e.g., "/settings/my-app" -> "settings_my_app")
+        matcher_name = route.lstrip("/").replace("/", "_").replace("-", "_")
+
+        # Handler for exact route match (/ and /path/)
+        lines.append(f"    @{matcher_name}_match {{")
+        lines.append(f"        path {route} {route}/")
+        lines.append(f"    }}")
+        lines.append(f"    handle @{matcher_name}_match {{")
+        lines.append(f"        uri strip_prefix {route}")
+        lines.append(f"        rewrite / /index.html")
+        lines.append(f"        file_server * {{")
+        lines.append(f"            root /srv/dist")
+        lines.append(f"        }}")
+        lines.append(f"    }}")
+        lines.append("")
+
+        # Handler for subpaths (e.g., /path/*)
+        lines.append(f"    @{matcher_name}_subpath {{")
+        lines.append(f"        path {route}/*")
+        lines.append(f"    }}")
+        lines.append(f"    handle @{matcher_name}_subpath {{")
+        lines.append(f"        uri strip_prefix {route}")
+        lines.append(f"        file_server * {{")
+        lines.append(f"            root /srv/dist")
+        lines.append(f"        }}")
+        lines.append(f"    }}")
+        lines.append("")
+
+    # Fallback handler
+    lines.append("    handle / {")
+    lines.append("        file_server * {")
+    lines.append("            root /srv/dist")
+    lines.append("        }")
+    lines.append("    }")
+
+    # Close the server block
+    lines.append("}")
+
+    return "\n".join(lines)
+
+
 def generate_pipeline_from_template(
     pipeline_template_path: str,
     app_name: str,
@@ -167,8 +232,14 @@ def run_plumber(
     print("\nGenerated proxy Caddyfile:")
     print(proxy_caddy_file)
 
-    # Generate app Caddyfile (currently empty template, but keep for future use)
-    app_caddy_file = "# App Caddyfile - not yet implemented"
+    # Generate app Caddyfile
+    app_caddy_file = generate_app_caddyfile(
+        app_url_value=app_url_value,
+        app_name=app_name,
+        app_port=app_port,
+    )
+    print("\nGenerated app Caddyfile:")
+    print(app_caddy_file)
 
     # Generate pipeline from template
     output_path = generate_pipeline_from_template(
