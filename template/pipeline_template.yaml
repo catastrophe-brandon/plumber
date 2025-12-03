@@ -59,7 +59,7 @@ spec:
       # Start Caddy with the configuration
       exec caddy run --config /etc/caddy/Caddyfile
   - name: proxy-routes-script
-    value: |
+    value: |-
       {{proxy_caddy_file}}
   - name: e2e-tests-script
     value: |
