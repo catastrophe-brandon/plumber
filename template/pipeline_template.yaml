@@ -60,11 +60,7 @@ spec:
       exec caddy run --config /etc/caddy/Caddyfile
   - name: proxy-routes-script
     value: |
-      #!/bin/sh
-      set -e
-      cat << PROXY_ROUTES_EOF
       {{proxy_caddy_file}}
-      PROXY_ROUTES_EOF
   - name: e2e-tests-script
     value: |
       #!/bin/bash
@@ -95,9 +91,9 @@ spec:
     resolver: git
     params:
     - name: url
-      value: https://github.com/catastrophe-brandon/konflux-pipelines
+      value: https://github.com/RedHatInsights/konflux-pipelines
     - name: revision
-      value: c956d1b09d2d6bb70110f7e6f67029276eb9f62a
+      value: main
     - name: pathInRepo
       value: pipelines/platform-ui/docker-build-run-all-tests.yaml
   taskRunTemplate:

@@ -89,6 +89,52 @@ def generate_frontend_proxy_caddyfile(
     return rendered
 
 
+def generate_proxy_routes_json(
+    app_url_value: list[str],
+    app_name: str,
+    app_port: str = "8000",
+    chrome_port: str = "9912",
+) -> str:
+    """
+    Generate JSON configuration for proxy routes (for Tekton pipeline).
+
+    Args:
+        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
+        app_name: Name of the application
+        app_port: Port for the application (default: "8000")
+        chrome_port: Port for Chrome resources (default: "9912")
+
+    Returns:
+        JSON string with route configuration
+    """
+    routes = {}
+
+    # Add standard Chrome routes
+    routes["/index.html"] = {
+        "url": f"http://localhost:{chrome_port}",
+        "is_chrome": True
+    }
+    routes["/apps/chrome*"] = {
+        "url": f"http://localhost:{chrome_port}",
+        "is_chrome": True
+    }
+
+    # Add app routes
+    routes[f"/apps/{app_name}*"] = {
+        "url": f"http://localhost:{app_port}",
+        "is_chrome": False
+    }
+
+    # Add all appUrl routes (pointing to chrome for the shell)
+    for route in app_url_value:
+        routes[f"{route}*"] = {
+            "url": f"http://localhost:{chrome_port}",
+            "is_chrome": True
+        }
+
+    return json.dumps(routes, indent=2)
+
+
 def generate_app_caddyfile(
     app_url_value: list[str],
     app_name: str,
@@ -222,15 +268,15 @@ def run_plumber(
         print(f"Warning: Could not read {fec_config_path} ({e}), using default routes")
         app_url_value = [f"/{app_name}"]
 
-    # Generate proxy Caddyfile
-    proxy_caddy_file = generate_frontend_proxy_caddyfile(
+    # Generate proxy routes JSON
+    proxy_routes_json = generate_proxy_routes_json(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
         chrome_port=chrome_port,
     )
-    print("\nGenerated proxy Caddyfile:")
-    print(proxy_caddy_file)
+    print("\nGenerated proxy routes JSON:")
+    print(proxy_routes_json)
 
     # Generate app Caddyfile
     app_caddy_file = generate_app_caddyfile(
@@ -243,7 +289,7 @@ def run_plumber(
 
     # Generate pipeline from template
     output_path = generate_pipeline_from_template(
-        pipeline_template, app_name, repo_url, app_caddy_file, proxy_caddy_file
+        pipeline_template, app_name, repo_url, app_caddy_file, proxy_routes_json
     )
     print(f"\nGenerated pipeline file: {output_path}")
 
