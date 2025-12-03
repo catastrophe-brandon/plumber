@@ -230,14 +230,15 @@ def generate_pipeline_from_template(
     # The template uses 6 spaces of indentation for content inside literal blocks
     indent = "      "
     app_caddy_indented = "\n".join(indent + line if line else "" for line in app_caddy_file.split("\n"))
-    # Proxy JSON also needs indentation for YAML consistency
-    proxy_json_indented = "\n".join(indent + line if line else "" for line in proxy_caddy_file.split("\n"))
+
+    # Proxy JSON is inside a heredoc, so it doesn't need YAML indentation
+    # The heredoc handles the content as-is
 
     # Perform substitutions
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
     substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_indented)
-    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_json_indented)
+    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_file)
 
     # Create output file in /tmp
     output_filename = f"{app_name}-pipeline.yaml"
