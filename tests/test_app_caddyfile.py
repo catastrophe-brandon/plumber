@@ -1,4 +1,4 @@
-from main import generate_app_caddyfile
+from generation import generate_app_caddyfile
 
 
 def test_generate_app_caddyfile_basic():

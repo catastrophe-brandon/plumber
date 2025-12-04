@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from main import generate_pipeline_from_template
+from generation import generate_pipeline_from_template
 
 
 def test_generate_pipeline_from_template():

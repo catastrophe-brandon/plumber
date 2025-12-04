@@ -4,7 +4,7 @@ import tempfile
 
 import pytest
 
-from main import get_app_url_from_fec_config
+from extraction import get_app_url_from_fec_config
 
 
 def test_get_app_url_from_fec_config():

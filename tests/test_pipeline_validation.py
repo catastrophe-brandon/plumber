@@ -3,7 +3,8 @@ import tempfile
 
 import yaml
 
-from main import generate_pipeline_from_template, run_plumber
+from main import run_plumber
+from generation import generate_pipeline_from_template, generate_proxy_routes_caddyfile
 
 
 def test_generated_pipeline_yaml_is_valid():
@@ -14,22 +15,20 @@ def test_generated_pipeline_yaml_is_valid():
 :8000 {
     file_server
 }"""
-    test_proxy_caddy = """# Test proxy Caddyfile
-@root path /
-handle @root {
-    reverse_proxy 127.0.0.1:9912
-}
-
-handle /test-app* {
-    reverse_proxy 127.0.0.1:8000
-}"""
+    # Generate proxy routes Caddyfile
+    test_proxy_caddyfile = generate_proxy_routes_caddyfile(
+        app_url_value=["/settings/test-app", "/test-app"],
+        app_name=test_app_name,
+        app_port="8000",
+        chrome_port="9912"
+    )
 
     # Use the actual template file
-    template_path = "template/pipeline_template.yaml"
+    template_path = "template/konflux_pipeline_template.yaml"
 
     # Generate the pipeline
     output_path = generate_pipeline_from_template(
-        template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddy
+        template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddyfile
     )
 
     try:
@@ -62,11 +61,11 @@ handle /test-app* {
         assert test_app_name_param is not None, "test-app-name param not found"
         assert test_app_name_param["value"] == test_app_name, "test-app-name value incorrect"
 
-        # Verify Caddyfile content was properly inserted
-        proxy_script = next((p for p in params if p["name"] == "proxy-routes-script"), None)
-        assert proxy_script is not None, "proxy-routes-script param not found"
-        assert "# Test proxy Caddyfile" in proxy_script["value"], "Proxy Caddyfile content not found"
-        assert "handle /test-app*" in proxy_script["value"], "Test app routes not found in proxy script"
+        # Verify Caddyfile proxy routes was properly inserted
+        proxy_routes = next((p for p in params if p["name"] == "frontend-proxy-routes"), None)
+        assert proxy_routes is not None, "frontend-proxy-routes param not found"
+        assert "handle /settings/test-app*" in proxy_routes["value"], "Proxy route not found"
+        assert "reverse_proxy 127.0.0.1:9912" in proxy_routes["value"], "Chrome proxy not found"
 
         app_script = next((p for p in params if p["name"] == "run-app-script"), None)
         assert app_script is not None, "run-app-script param not found"
@@ -103,10 +102,10 @@ module.exports = {
     try:
         test_app_name = "integration-test-app"
         test_repo_url = "https://github.com/test/integration.git"
-        template_path = "template/pipeline_template.yaml"
+        template_path = "template/konflux_pipeline_template.yaml"
 
         # Import the function that uses fec config
-        from main import get_app_url_from_fec_config, generate_frontend_proxy_caddyfile
+        from extraction import get_app_url_from_fec_config
 
         # Get app URLs from fec config
         app_urls = get_app_url_from_fec_config(fec_config_path)
@@ -114,8 +113,8 @@ module.exports = {
         assert len(app_urls) == 3, f"Expected 3 URLs, got {len(app_urls)}"
         assert "/settings/test-app" in app_urls, "Expected URL not found"
 
-        # Generate proxy Caddyfile
-        proxy_caddy = generate_frontend_proxy_caddyfile(
+        # Generate proxy routes Caddyfile
+        proxy_caddyfile = generate_proxy_routes_caddyfile(
             app_url_value=app_urls,
             app_name=test_app_name,
             app_port="8000",
@@ -125,7 +124,7 @@ module.exports = {
         # Generate pipeline
         app_caddy = "# Integration test app Caddyfile"
         output_path = generate_pipeline_from_template(
-            template_path, test_app_name, test_repo_url, app_caddy, proxy_caddy
+            template_path, test_app_name, test_repo_url, app_caddy, proxy_caddyfile
         )
 
         # Validate YAML
@@ -135,12 +134,13 @@ module.exports = {
         assert pipeline is not None, "Failed to parse generated pipeline YAML"
         assert pipeline["kind"] == "PipelineRun", "Invalid pipeline kind"
 
-        # Verify fec config URLs made it into the proxy script
+        # Verify fec config URLs made it into the proxy routes as Caddyfile
         params = pipeline["spec"]["params"]
-        proxy_script = next((p for p in params if p["name"] == "proxy-routes-script"), None)
-        assert proxy_script is not None, "proxy-routes-script not found"
-        assert "handle /settings/test-app*" in proxy_script["value"], "/settings route not found"
-        assert "handle /apps/test-app*" in proxy_script["value"], "/apps route not found"
+        proxy_routes = next((p for p in params if p["name"] == "frontend-proxy-routes"), None)
+        assert proxy_routes is not None, "frontend-proxy-routes not found"
+        assert "handle /settings/test-app*" in proxy_routes["value"], "/settings route not found"
+        assert "handle /apps/test-app*" in proxy_routes["value"], "/apps route not found"
+        assert "reverse_proxy 127.0.0.1" in proxy_routes["value"], "reverse_proxy not found"
 
         # Clean up
         os.remove(output_path)
@@ -152,29 +152,17 @@ module.exports = {
 
 
 def test_pipeline_yaml_comments_and_special_chars():
-    """Test that Caddyfile content with comments and special chars doesn't break YAML."""
+    """Test that Caddyfile route data with special chars doesn't break YAML."""
     test_app_name = "special-char-app"
     test_repo_url = "https://github.com/test/special.git"
 
-    # Caddyfile with various special characters and comments
-    test_proxy_caddy = """# Caddyfile with special characters
-# Port 9912 - Chrome
-# Port 8000 - App
-
-@root path /
-handle @root {
-    reverse_proxy 127.0.0.1:9912
-}
-
-# Handle app routes
-handle /special-char-app* {
-    reverse_proxy 127.0.0.1:8000
-}
-
-# Wildcard matching
-handle /apps/chrome* {
-    reverse_proxy 127.0.0.1:9912
-}"""
+    # Generate proxy routes Caddyfile with special characters in routes
+    test_proxy_caddyfile = generate_proxy_routes_caddyfile(
+        app_url_value=["/special-char-app", "/apps/special-char-app", "/settings/special-char-app"],
+        app_name=test_app_name,
+        app_port="8000",
+        chrome_port="9912"
+    )
 
     test_app_caddy = """# App Caddyfile
 :8000 {
@@ -182,24 +170,25 @@ handle /apps/chrome* {
     file_server
 }"""
 
-    template_path = "template/pipeline_template.yaml"
+    template_path = "template/konflux_pipeline_template.yaml"
     output_path = generate_pipeline_from_template(
-        template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddy
+        template_path, test_app_name, test_repo_url, test_app_caddy, test_proxy_caddyfile
     )
 
     try:
-        # Parse the YAML - this will fail if comments break the YAML structure
+        # Parse the YAML - this will fail if Caddyfile breaks the YAML structure
         with open(output_path) as f:
             pipeline = yaml.safe_load(f)
 
-        assert pipeline is not None, "Failed to parse YAML with comments"
+        assert pipeline is not None, "Failed to parse YAML with Caddyfile"
         assert pipeline["kind"] == "PipelineRun", "Invalid pipeline structure"
 
-        # Verify comments are preserved in the script
+        # Verify Caddyfile is in the parameter
         params = pipeline["spec"]["params"]
-        proxy_script = next((p for p in params if p["name"] == "proxy-routes-script"), None)
-        assert "# Caddyfile with special characters" in proxy_script["value"]
-        assert "# Port 9912 - Chrome" in proxy_script["value"]
+        proxy_routes = next((p for p in params if p["name"] == "frontend-proxy-routes"), None)
+        assert proxy_routes is not None, "frontend-proxy-routes param not found"
+        assert "handle /special-char-app*" in proxy_routes["value"], "Caddyfile routes not found"
+        assert "reverse_proxy 127.0.0.1" in proxy_routes["value"], "reverse_proxy not found"
 
     finally:
         if os.path.exists(output_path):

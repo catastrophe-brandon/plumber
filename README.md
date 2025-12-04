@@ -59,7 +59,7 @@ plumber <app_name> <repo_url> <pipeline_template> [--fec-config <path>]
 ```bash
 plumber learning-resources \
   https://github.com/RedHatInsights/learning-resources.git \
-  template/pipeline_template.yaml \
+  template/konflux_pipeline_template.yaml \
   --fec-config fec_configs/fec.config.js
 ```
 
@@ -113,7 +113,7 @@ from main import run_plumber
 run_plumber(
     app_name="learning-resources",
     repo_url="https://github.com/RedHatInsights/learning-resources.git",
-    pipeline_template="template/pipeline_template.yaml",
+    pipeline_template="template/konflux_pipeline_template.yaml",
     fec_config_path="fec_configs/fec.config.js"
 )
 # Generates pipeline at /tmp/learning-resources-pipeline.yaml
@@ -122,10 +122,11 @@ run_plumber(
 #### Generate Pipeline from Template
 
 ```python
-from main import generate_pipeline_from_template
+
+from generation import generate_pipeline_from_template
 
 output_path = generate_pipeline_from_template(
-    pipeline_template_path="template/pipeline_template.yaml",
+    pipeline_template_path="template/konflux_pipeline_template.yaml",
     app_name="my-app",
     repo_url="https://github.com/user/repo.git",
     app_caddy_file="# App Caddyfile content",
@@ -137,7 +138,8 @@ print(f"Generated pipeline: {output_path}")
 #### Extract appUrl from fec.config.js
 
 ```python
-from main import get_app_url_from_fec_config
+
+from extraction import get_app_url_from_fec_config
 
 # Use default path (fec.config.js in current directory)
 app_urls = get_app_url_from_fec_config()
@@ -150,7 +152,8 @@ app_urls = get_app_url_from_fec_config("path/to/fec.config.js")
 #### Generate App Caddyfile
 
 ```python
-from main import generate_app_caddyfile
+
+from generation import generate_app_caddyfile
 
 app_urls = [
     "/settings/learning-resources",
@@ -169,7 +172,8 @@ print(caddyfile_config)
 #### Generate Frontend Proxy Caddyfile
 
 ```python
-from main import generate_frontend_proxy_caddyfile
+
+from generation import generate_frontend_proxy_caddyfile
 
 app_urls = [
     "/settings/learning-resources",

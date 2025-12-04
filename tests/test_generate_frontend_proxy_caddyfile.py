@@ -1,4 +1,4 @@
-from main import generate_frontend_proxy_caddyfile
+from generation import generate_frontend_proxy_caddyfile
 
 
 def test_generate_frontend_proxy_caddyfile():
