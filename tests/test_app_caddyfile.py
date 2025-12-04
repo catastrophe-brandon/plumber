@@ -124,6 +124,6 @@ def test_generate_app_caddyfile_structure():
     assert lines[-1] == "}"
 
     # Should have proper indentation (4 spaces for top-level handlers)
-    handler_lines = [l for l in lines if l.strip().startswith("@")]
+    handler_lines = [line for line in lines if line.strip().startswith("@")]
     for line in handler_lines:
         assert line.startswith("    ")  # 4 spaces

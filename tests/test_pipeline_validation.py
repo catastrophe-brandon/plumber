@@ -3,7 +3,6 @@ import tempfile
 
 import yaml
 
-from main import run_plumber
 from generation import generate_pipeline_from_template, generate_proxy_routes_caddyfile
 
 

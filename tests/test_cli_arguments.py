@@ -1,11 +1,10 @@
 import argparse
-import pytest
 import sys
-from io import StringIO
 from unittest.mock import patch
 
+import pytest
+
 # Import the main module to test argument parsing
-import main
 
 
 def test_pipeline_template_argument():
