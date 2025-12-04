@@ -119,6 +119,7 @@ def test_mutually_exclusive_templates():
 
 def test_pipeline_type_determination_konflux():
     """Test that pipeline_type is correctly set to 'konflux' when --pipeline-template is used."""
+
     # Simulate parsed args
     class Args:
         pipeline_template = "template/konflux_pipeline_template.yaml"
@@ -136,6 +137,7 @@ def test_pipeline_type_determination_konflux():
 
 def test_pipeline_type_determination_minikube():
     """Test that pipeline_type is correctly set to 'minikube' when --minikube-template is used."""
+
     # Simulate parsed args
     class Args:
         pipeline_template = None

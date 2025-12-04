@@ -100,14 +100,22 @@ def generate_pipeline_from_template(
     indent = "      "
 
     app_caddy_lines = app_caddy_file.split("\n")
-    app_caddy_indented = app_caddy_lines[0] + "\n" + "\n".join(
-        indent + line if line else "" for line in app_caddy_lines[1:]
-    ) if len(app_caddy_lines) > 1 else app_caddy_lines[0]
+    app_caddy_indented = (
+        app_caddy_lines[0]
+        + "\n"
+        + "\n".join(indent + line if line else "" for line in app_caddy_lines[1:])
+        if len(app_caddy_lines) > 1
+        else app_caddy_lines[0]
+    )
 
     proxy_caddy_lines = proxy_caddy_file.split("\n")
-    proxy_caddy_indented = proxy_caddy_lines[0] + "\n" + "\n".join(
-        indent + line if line else "" for line in proxy_caddy_lines[1:]
-    ) if len(proxy_caddy_lines) > 1 else proxy_caddy_lines[0]
+    proxy_caddy_indented = (
+        proxy_caddy_lines[0]
+        + "\n"
+        + "\n".join(indent + line if line else "" for line in proxy_caddy_lines[1:])
+        if len(proxy_caddy_lines) > 1
+        else proxy_caddy_lines[0]
+    )
 
     # Perform substitutions
     substituted_content = template_content.replace("{{app_name}}", app_name)
@@ -147,27 +155,15 @@ def generate_proxy_routes_json(
     routes = {}
 
     # Add standard Chrome routes
-    routes["/index.html"] = {
-        "url": f"http://localhost:{chrome_port}",
-        "is_chrome": True
-    }
-    routes["/apps/chrome*"] = {
-        "url": f"http://localhost:{chrome_port}",
-        "is_chrome": True
-    }
+    routes["/index.html"] = {"url": f"http://localhost:{chrome_port}", "is_chrome": True}
+    routes["/apps/chrome*"] = {"url": f"http://localhost:{chrome_port}", "is_chrome": True}
 
     # Add app routes
-    routes[f"/apps/{app_name}*"] = {
-        "url": f"http://localhost:{app_port}",
-        "is_chrome": False
-    }
+    routes[f"/apps/{app_name}*"] = {"url": f"http://localhost:{app_port}", "is_chrome": False}
 
     # Add all appUrl routes (pointing to chrome for the shell)
     for route in app_url_value:
-        routes[f"{route}*"] = {
-            "url": f"http://localhost:{chrome_port}",
-            "is_chrome": True
-        }
+        routes[f"{route}*"] = {"url": f"http://localhost:{chrome_port}", "is_chrome": True}
 
     # Return compact JSON on a single line to avoid YAML parsing issues
     return json.dumps(routes)

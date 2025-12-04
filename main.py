@@ -2,7 +2,11 @@ import argparse
 import json
 
 from extraction import get_app_url_from_fec_config
-from generation import generate_app_caddyfile, generate_pipeline_from_template, generate_proxy_routes_caddyfile
+from generation import (
+    generate_app_caddyfile,
+    generate_pipeline_from_template,
+    generate_proxy_routes_caddyfile,
+)
 
 
 def run_plumber(
@@ -10,7 +14,7 @@ def run_plumber(
     repo_url: str,
     pipeline_template: str,
     fec_config_path: str = "fec.config.js",
-    pipeline_type: str = "konflux"
+    pipeline_type: str = "konflux",
 ):
     print("Hello from plumber!")
     print(f"App Name: {app_name}")
@@ -64,14 +68,10 @@ def main():
     # Mutually exclusive group for pipeline type
     pipeline_group = parser.add_mutually_exclusive_group(required=True)
     pipeline_group.add_argument(
-        "--pipeline-template",
-        type=str,
-        help="Path to the Konflux pipeline template file"
+        "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
     )
     pipeline_group.add_argument(
-        "--minikube-template",
-        type=str,
-        help="Path to the Minikube pipeline template file"
+        "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
     )
 
     parser.add_argument(

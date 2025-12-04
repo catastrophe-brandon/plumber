@@ -20,7 +20,7 @@ def test_generated_pipeline_yaml_is_valid():
         app_url_value=["/settings/test-app", "/test-app"],
         app_name=test_app_name,
         app_port="8000",
-        chrome_port="9912"
+        chrome_port="9912",
     )
 
     # Use the actual template file
@@ -161,7 +161,7 @@ def test_pipeline_yaml_comments_and_special_chars():
         app_url_value=["/special-char-app", "/apps/special-char-app", "/settings/special-char-app"],
         app_name=test_app_name,
         app_port="8000",
-        chrome_port="9912"
+        chrome_port="9912",
     )
 
     test_app_caddy = """# App Caddyfile
