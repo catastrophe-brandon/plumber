@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-from main import generate_pipeline_from_template
+from generation import generate_pipeline_from_template
 
 
 def test_generate_pipeline_from_template():
@@ -63,9 +63,11 @@ spec:
         assert f"value: {test_app_name}" in output_content
         assert f"value: {test_repo_url}" in output_content
 
-        # Verify output path is in /tmp
-        assert output_path.startswith("/tmp/"), f"Output path {output_path} is not in /tmp"
-        assert output_path.endswith(f"{test_app_name}-pipeline.yaml")
+        # Verify output path is in current directory
+        assert os.path.dirname(output_path) == os.getcwd(), (
+            f"Output path {output_path} is not in current directory"
+        )
+        assert output_path.endswith(f"{test_app_name}-pull-request.yaml")
 
         # Clean up output file
         os.remove(output_path)

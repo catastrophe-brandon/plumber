@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 
 .idea
+/.python-version
+konflux-pipelines/
+fec_configs/
+
+# Generated pipeline files
+*-pull-request.yaml

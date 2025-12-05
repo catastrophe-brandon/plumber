@@ -9,7 +9,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
       == "master"
-    pipelinesascode.tekton.dev/pipeline: https://github.com/catastrophe-brandon/konflux-pipelines/raw/btweed/platform-ui-e2e/pipelines/platform-ui/docker-build-run-all-tests.yaml
+    pipelinesascode.tekton.dev/pipeline: https://raw.githubusercontent.com/RedHatInsights/konflux-pipelines/refs/heads/main/pipelines/platform-ui/docker-build-run-all-tests.yaml
   creationTimestamp: null
   labels:
     appstudio.openshift.io/application: {{app_name}}
@@ -48,23 +48,20 @@ spec:
   - name: run-app-script
     value: |
       #!/bin/sh
+      # Script that sets up the Caddyfile for the test application container
       set -e
 
       echo "Creating Caddyfile..."
-      cat > /etc/caddy/Caddyfile << CADDY_EOF
+      cat > /etc/caddy/Caddyfile << 'CADDY_EOF'
       {{app_caddy_file}}
       CADDY_EOF
       
       echo "Starting application with Caddy..."
       # Start Caddy with the configuration
       exec caddy run --config /etc/caddy/Caddyfile
-  - name: proxy-routes-script
+  - name: frontend-proxy-routes
     value: |
-      #!/bin/sh
-      set -e
-      cat << PROXY_ROUTES_EOF
       {{proxy_caddy_file}}
-      PROXY_ROUTES_EOF
   - name: e2e-tests-script
     value: |
       #!/bin/bash
@@ -97,7 +94,7 @@ spec:
     - name: url
       value: https://github.com/catastrophe-brandon/konflux-pipelines
     - name: revision
-      value: btweed/platform-ui-e2e
+      value: btweed/refactoring
     - name: pathInRepo
       value: pipelines/platform-ui/docker-build-run-all-tests.yaml
   taskRunTemplate:
