@@ -1,0 +1,93 @@
+# Caddyfile config for the application to test (This is NOT JSON)
+{
+  	{$CADDY_TLS_MODE}
+  	auto_https disable_redirects
+  	servers {
+  		metrics
+  	}
+  }
+
+  :9000 {
+  	metrics /metrics
+  }
+
+  :8000 {
+  	{$CADDY_TLS_CERT}
+  	log
+
+  	# Handle main app route
+  	@app_match {
+  		path /apps/{{ app_name }}*
+  	}
+  	handle @app_match {
+  		uri strip_prefix /apps/{{ app_name }}
+  		file_server * {
+  			root /srv/dist
+  			browse
+  		}
+  	}
+
+    # Handle env based main route
+    @env_match {
+        path {$ENV_PUBLIC_PATH}*
+    }
+
+    handle @env_match {
+        uri strip_prefix {$ENV_PUBLIC_PATH}
+        file_server * {
+            root /srv/dist
+            browse
+        }
+    }
+
+  # Basic handling for application name without any prefixes in path
+  @{{ app_name }}_match {
+      path /{{ app_name }}/{{ app_name }}/
+  }
+  handle @{{ app_name }}_match {
+      uri strip_prefix /{{ app_name }}
+      rewrite / /index.html
+      file_server * {
+          root /srv/dist
+      }
+  }
+
+  @{{ app_name }}_subpath {
+      path /{{ app_name }}/*
+  }
+  handle @{{ app_name }}_subpath {
+      uri strip_prefix /{{ app_name }}
+      file_server * {
+          root /srv/dist
+      }
+  }
+
+  # Beginning of dynamically-generated {{ app_name }} routes with route prefixes
+  {% for route_path_prefix in route_path_prefixes %}
+    @{{ route_path_prefix }}_{{ app_name }}_match {
+      path /{{ route_path_prefix }}/{{ app_name }} /{{ route_path_prefix }}/{{ app_name }}/
+    }
+    handle @{{ route_path_prefix }}_{{ app_name }}_match {
+        uri strip_prefix /{{ route_path_prefix }}/{{ app_name }}
+        rewrite / /index.html
+        file_server * {
+            root /srv/dist
+        }
+    }
+
+    @{{ route_path_prefix }}_{{ app_name }}_subpath {
+        path /{{ route_path_prefix }}/{{ app_name }}/*
+    }
+    handle @{{ route_path_prefix }}_{{ app_name }}_subpath {
+        uri strip_prefix /{{ route_path_prefix }}/{{ app_name }}
+        file_server * {
+            root /srv/dist
+        }
+    }
+  {% endfor %}
+
+  # Handle the root path
+  handle / {
+    redir /apps/chrome/index.html permanent
+  }
+}

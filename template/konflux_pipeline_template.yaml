@@ -48,6 +48,7 @@ spec:
   - name: run-app-script
     value: |
       #!/bin/sh
+      # Script that sets up the Caddyfile for the test application container
       set -e
 
       echo "Creating Caddyfile..."

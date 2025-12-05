@@ -8,9 +8,10 @@ def generate_app_caddyfile(
     app_url_value: list[str],
     app_name: str,
     app_port: str = "8000",
+    template_path: str = "template/app_caddy.template.j2",
 ) -> str:
     """
-    Generate a Caddyfile configuration for the application server.
+    Generate a Caddyfile configuration for the application server using a Jinja2 template.
 
     This creates Caddy route handlers that serve the static application files
     from /srv/dist for each route in appUrl.
@@ -19,54 +20,43 @@ def generate_app_caddyfile(
         app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
+        template_path: Path to the Jinja2 template (default: "template/app_caddy.template.j2")
 
     Returns:
         Rendered Caddyfile configuration as a string
     """
-    # Start with the server block
-    lines = [f":{app_port} {{"]
-
-    # Generate route handlers for each app URL
+    # Extract route path prefixes from app URLs
+    # E.g., "/settings/learning-resources" -> "settings"
+    # E.g., "/openshift/learning-resources" -> "openshift"
+    # Skip routes that are just "/{app_name}" or "/{app_name}/..." (no prefix)
+    route_path_prefixes = []
     for route in app_url_value:
-        # Generate matcher name from route (e.g., "/settings/my-app" -> "settings_my_app")
-        matcher_name = route.lstrip("/").replace("/", "_").replace("-", "_")
+        parts = route.strip("/").split("/")
+        # Only process routes that end with the app_name
+        # E.g., "/settings/learning-resources" -> ["settings", "learning-resources"]
+        # E.g., "/learning-resources" -> ["learning-resources"]
+        # E.g., "/learning-resources/creator" -> skip (doesn't end with app_name)
+        if len(parts) >= 1 and parts[-1] == app_name:
+            if len(parts) == 2:
+                # Route like "/settings/learning-resources" -> prefix is "settings"
+                prefix = parts[0]
+                if prefix not in route_path_prefixes:
+                    route_path_prefixes.append(prefix)
+            # If len(parts) == 1, it's just "/{app_name}", no prefix to add
 
-        # Handler for exact route match (/ and /path/)
-        lines.append(f"    @{matcher_name}_match {{")
-        lines.append(f"        path {route} {route}/")
-        lines.append("    }")
-        lines.append(f"    handle @{matcher_name}_match {{")
-        lines.append(f"        uri strip_prefix {route}")
-        lines.append("        rewrite / /index.html")
-        lines.append("        file_server * {")
-        lines.append("            root /srv/dist")
-        lines.append("        }")
-        lines.append("    }")
-        lines.append("")
+    # Set up Jinja2 environment
+    template_dir = os.path.dirname(template_path)
+    template_file = os.path.basename(template_path)
+    env = Environment(loader=FileSystemLoader(template_dir))
+    template = env.get_template(template_file)
 
-        # Handler for subpaths (e.g., /path/*)
-        lines.append(f"    @{matcher_name}_subpath {{")
-        lines.append(f"        path {route}/*")
-        lines.append("    }")
-        lines.append(f"    handle @{matcher_name}_subpath {{")
-        lines.append(f"        uri strip_prefix {route}")
-        lines.append("        file_server * {")
-        lines.append("            root /srv/dist")
-        lines.append("        }")
-        lines.append("    }")
-        lines.append("")
+    # Render the template
+    rendered = template.render(
+        app_name=app_name,
+        route_path_prefixes=route_path_prefixes,
+    )
 
-    # Fallback handler
-    lines.append("    handle / {")
-    lines.append("        file_server * {")
-    lines.append("            root /srv/dist")
-    lines.append("        }")
-    lines.append("    }")
-
-    # Close the server block
-    lines.append("}")
-
-    return "\n".join(lines)
+    return rendered
 
 
 def generate_pipeline_from_template(
