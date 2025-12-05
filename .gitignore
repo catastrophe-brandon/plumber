@@ -210,3 +210,6 @@ __marimo__/
 /.python-version
 konflux-pipelines/
 fec_configs/
+
+# Generated pipeline files
+*-pull-request.yaml

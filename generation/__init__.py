@@ -68,7 +68,7 @@ def generate_pipeline_from_template(
 ) -> str:
     """
     Read a pipeline template file, substitute app_name, repo_url, and Caddyfile contents,
-    and write to a temporary location.
+    and write to the current directory.
 
     Args:
         pipeline_template_path: Path to the pipeline template YAML file
@@ -78,7 +78,7 @@ def generate_pipeline_from_template(
         proxy_caddy_file: Contents of the proxy Caddyfile
 
     Returns:
-        Path to the generated pipeline file in /tmp
+        Path to the generated pipeline file in the current directory
     """
     # Read the template file
     with open(pipeline_template_path) as f:
@@ -113,9 +113,9 @@ def generate_pipeline_from_template(
     substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_indented)
     substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_indented)
 
-    # Create output file in /tmp
-    output_filename = f"{app_name}-pipeline.yaml"
-    output_path = os.path.join("/tmp", output_filename)
+    # Create output file in current directory
+    output_filename = f"{app_name}-pull-request.yaml"
+    output_path = os.path.join(os.getcwd(), output_filename)
 
     # Write the substituted content
     with open(output_path, "w") as f:
