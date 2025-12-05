@@ -15,11 +15,12 @@ Plumber automates the process of generating Tekton pipeline configurations and C
 - YAML validation to ensure syntactically correct pipelines
 
 ### Caddyfile Generation
-- **App Caddyfile**: Generates Caddy server configuration for serving your application's static files
+- **App Caddyfile**: Uses Jinja2 template to generate Caddy server configuration for serving your application's static files
+  - Template-based configuration with TLS and metrics support
   - Route matchers for exact paths and subpaths
   - URI stripping and index.html rewriting
   - Serves files from `/srv/dist`
-- **Proxy Caddyfile**: Generates reverse proxy configuration for the frontend development proxy
+- **Proxy Routes Caddyfile**: Generates reverse proxy route snippets for the frontend development proxy
   - Routes Chrome resources to port 9912
   - Routes application resources to port 8000
   - Handles multiple route prefixes
@@ -46,20 +47,29 @@ uv pip install -e .
 Once installed, you can use the `plumber` command from anywhere:
 
 ```bash
-plumber <app_name> <repo_url> <pipeline_template> [--fec-config <path>]
+plumber <app_name> <repo_url> (--pipeline-template <path> | --minikube-template <path>) [--fec-config <path>]
 ```
 
 **Arguments:**
 - `app_name`: Name of the application (e.g., "learning-resources")
 - `repo_url`: Git URL of the repository (e.g., "https://github.com/user/repo.git")
-- `pipeline_template`: Path to the pipeline template file (e.g., "template/pipeline_template.yaml")
+- `--pipeline-template`: Path to the Konflux pipeline template file (mutually exclusive with `--minikube-template`)
+- `--minikube-template`: Path to the Minikube pipeline template file (mutually exclusive with `--pipeline-template`)
 - `--fec-config`: (Optional) Path to fec.config.js file (default: "fec.config.js")
 
-**Example:**
+**Example (Konflux):**
 ```bash
 plumber learning-resources \
   https://github.com/RedHatInsights/learning-resources.git \
-  template/konflux_pipeline_template.yaml \
+  --pipeline-template template/konflux_pipeline_template.yaml \
+  --fec-config fec_configs/fec.config.js
+```
+
+**Example (Minikube):**
+```bash
+plumber learning-resources \
+  https://github.com/RedHatInsights/learning-resources.git \
+  --minikube-template template/minikube_pipeline_template.yaml \
   --fec-config fec_configs/fec.config.js
 ```
 
@@ -68,33 +78,62 @@ plumber learning-resources \
 Hello from plumber!
 App Name: learning-resources
 Repo URL: https://github.com/RedHatInsights/learning-resources.git
-Pipeline Template: template/pipeline_template.yaml
+Pipeline Type: konflux
+Pipeline Template: template/konflux_pipeline_template.yaml
 Found appUrl in fec_configs/fec.config.js: ['/settings/learning-resources', '/openshift/learning-resources', ...]
 
-Generated proxy Caddyfile:
-# Caddyfile template for frontend-development-proxy sidecar
-# Note:
-# Port 9912 - Resources from insights-chrome-dev image
-# Port 8000 - Resources from application to test
-
+Generated proxy routes Caddyfile:
 @root path /
 handle @root {
+    reverse_proxy 127.0.0.1:9912
+}
+
+handle /index.html {
+    reverse_proxy 127.0.0.1:9912
+}
+
+handle /apps/chrome* {
+    reverse_proxy 127.0.0.1:9912
+}
+
+handle /apps/learning-resources* {
+    reverse_proxy 127.0.0.1:8000
+}
+
+handle /settings/learning-resources* {
     reverse_proxy 127.0.0.1:9912
 }
 ...
 
 Generated app Caddyfile:
+# Caddyfile config for the application undergoing testing (This is NOT JSON)
+{
+  	{$CADDY_TLS_MODE}
+  	auto_https disable_redirects
+  	servers {
+  		metrics
+  	}
+}
+
+:9000 {
+  	metrics /metrics
+}
+
 :8000 {
-    @settings_learning_resources_match {
-        path /settings/learning-resources /settings/learning-resources/
-    }
-    handle @settings_learning_resources_match {
-        uri strip_prefix /settings/learning-resources
-        rewrite / /index.html
-        file_server * {
-            root /srv/dist
-        }
-    }
+  	{$CADDY_TLS_CERT}
+  	log
+
+  	# Handle main app route
+  	@app_match {
+  		path /apps/learning-resources*
+  	}
+  	handle @app_match {
+  		uri strip_prefix /apps/learning-resources
+  		file_server * {
+  			root /srv/dist
+  			browse
+  		}
+  	}
     ...
 }
 
@@ -152,7 +191,6 @@ app_urls = get_app_url_from_fec_config("path/to/fec.config.js")
 #### Generate App Caddyfile
 
 ```python
-
 from generation import generate_app_caddyfile
 
 app_urls = [
@@ -161,19 +199,18 @@ app_urls = [
     "/learning-resources",
 ]
 
+# Uses app_caddy.template.j2 to generate Caddyfile
 caddyfile_config = generate_app_caddyfile(
     app_url_value=app_urls,
     app_name="learning-resources",
-    app_port="8000"
 )
 print(caddyfile_config)
 ```
 
-#### Generate Frontend Proxy Caddyfile
+#### Generate Proxy Routes Caddyfile
 
 ```python
-
-from generation import generate_frontend_proxy_caddyfile
+from generation import generate_proxy_routes_caddyfile
 
 app_urls = [
     "/settings/learning-resources",
@@ -181,7 +218,8 @@ app_urls = [
     "/insights/learning-resources",
 ]
 
-caddyfile_config = generate_frontend_proxy_caddyfile(
+# Generates Caddyfile route snippets for proxy
+caddyfile_config = generate_proxy_routes_caddyfile(
     app_url_value=app_urls,
     app_name="learning-resources",
     app_port="8000",
@@ -192,25 +230,37 @@ print(caddyfile_config)
 
 ## Templates
 
-### Pipeline Template (`template/pipeline_template.yaml`)
+### Pipeline Templates
 
-Tekton PipelineRun template with placeholders:
+**Konflux Pipeline** (`template/konflux_pipeline_template.yaml`)
+Tekton PipelineRun template for Konflux with placeholders:
 - `{{app_name}}`: Replaced with the application name
 - `{{repo_url}}`: Replaced with the repository URL
 - `{{app_caddy_file}}`: Replaced with generated app Caddyfile content
-- `{{proxy_caddy_file}}`: Replaced with generated proxy Caddyfile content
+- `{{proxy_caddy_file}}`: Replaced with generated proxy routes Caddyfile snippets
+
+**Minikube Pipeline** (`template/minikube_pipeline_template.yaml`)
+Tekton PipelineRun template for Minikube (currently empty placeholder)
+
+### App Caddy Template (`template/app_caddy.template.j2`)
+
+Jinja2 template for generating the application sidecar Caddyfile with variables:
+- `app_name`: Application name
+- `route_path_prefixes`: List of route prefixes extracted from appUrl (e.g., `["settings", "openshift", "iam"]`)
+
+Generates a complete Caddyfile with:
+- Global TLS and metrics configuration
+- Metrics server on port 9000
+- Application server on port 8000
+- Route handlers for each route prefix
 
 ### Proxy Caddy Template (`template/proxy_caddy.template.j2`)
 
-Jinja2 template for generating Caddyfile configurations with variables:
-- `app_name`: Application name
-- `app_port`: Port for the application (default: 8000)
-- `chrome_port`: Port for Chrome resources (default: 9912)
-- `route_prefixes`: List of route paths from appUrl
+Jinja2 template for generating frontend proxy Caddyfile (currently not used; proxy routes are generated programmatically)
 
 ## Testing
 
-The project includes a comprehensive test suite with 20 tests covering all functionality.
+The project includes a comprehensive test suite with 21 tests covering all functionality.
 
 Run all tests:
 ```bash
@@ -220,7 +270,7 @@ pytest tests/ -v
 Run specific test files:
 ```bash
 pytest tests/test_pipeline_validation.py -v  # Pipeline YAML validation tests
-pytest tests/test_app_caddyfile.py -v        # App Caddyfile generation tests
+pytest tests/test_cli_arguments.py -v        # CLI argument parsing tests
 pytest tests/test_generate_pipeline.py -v    # Pipeline generation tests
 ```
 
@@ -232,8 +282,8 @@ pytest tests/ --cov=main
 ### Test Coverage
 
 - **Pipeline Generation**: Template substitution, special characters, YAML validation
-- **App Caddyfile**: Route generation, port configuration, structure validation
-- **Proxy Caddyfile**: Template rendering, route handling, custom ports
+- **CLI Arguments**: Dual pipeline support, mutually exclusive options, argument parsing
+- **Proxy Routes**: Caddyfile snippet generation, route handling, custom ports
 - **Config Parsing**: JavaScript parsing, trailing comma handling, quote normalization
 - **Integration Tests**: Full end-to-end pipeline generation with fec.config.js
 
@@ -267,17 +317,22 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs automatically on pus
 ```
 plumber/
 ├── main.py                              # Main application code with CLI entry point
+├── extraction/
+│   └── __init__.py                      # fec.config.js parsing functions
+├── generation/
+│   └── __init__.py                      # Caddyfile and pipeline generation functions
 ├── template/
-│   ├── pipeline_template.yaml           # Tekton pipeline template
-│   ├── proxy_caddy.template.j2          # Proxy Caddyfile Jinja2 template
-│   └── app_caddy.template.j2            # App Caddyfile template (empty - generated programmatically)
+│   ├── konflux_pipeline_template.yaml   # Tekton pipeline template for Konflux
+│   ├── minikube_pipeline_template.yaml  # Tekton pipeline template for Minikube
+│   ├── app_caddy.template.j2            # App Caddyfile Jinja2 template
+│   └── proxy_caddy.template.j2          # Proxy Caddyfile Jinja2 template (unused)
 ├── tests/
 │   ├── test_pipeline_validation.py      # Pipeline YAML validation tests
-│   ├── test_app_caddyfile.py            # App Caddyfile generation tests
+│   ├── test_cli_arguments.py            # CLI argument parsing tests
 │   ├── test_generate_pipeline.py        # Pipeline template substitution tests
 │   ├── test_get_app_url.py              # fec.config.js parsing tests
-│   ├── test_generate_frontend_proxy_caddyfile.py  # Proxy generation tests
-│   └── test_proxy_caddy_template.py     # Proxy template rendering tests
+│   ├── test_generate_frontend_proxy_caddyfile.py  # Proxy generation tests (unused function)
+│   └── test_proxy_caddy_template.py     # Proxy template rendering tests (unused template)
 ├── pyproject.toml                       # Project configuration with CLI entry point
 └── README.md                            # This file
 ```
@@ -299,12 +354,17 @@ uv pip install -e ".[dev]"
 This includes:
 - pytest >= 7.0.0
 - ruff >= 0.14.0
+- pyyaml >= 6.0.0
 
 ## How It Works
 
 1. **Read Configuration**: Plumber reads your application's `fec.config.js` file and extracts the `appUrl` array
-2. **Generate App Caddyfile**: Creates a Caddy server configuration with route handlers for each URL
-3. **Generate Proxy Caddyfile**: Creates a reverse proxy configuration using the Jinja2 template
-4. **Embed in Pipeline**: Both Caddyfiles are embedded into the Tekton pipeline template with proper YAML indentation
-5. **Validate**: The generated pipeline is validated to ensure it's syntactically correct YAML
-6. **Output**: A complete Tekton PipelineRun YAML is written to `/tmp/<app_name>-pipeline.yaml`
+2. **Extract Route Prefixes**: Analyzes the appUrl routes to extract route prefixes (e.g., `settings`, `openshift`, `iam`)
+3. **Generate App Caddyfile**: Uses the `app_caddy.template.j2` Jinja2 template to create a complete Caddy server configuration with:
+   - Global TLS and metrics configuration
+   - Route handlers for each route prefix
+   - Environment-based routing support
+4. **Generate Proxy Routes**: Programmatically generates Caddyfile route snippets for the frontend proxy with reverse_proxy directives
+5. **Embed in Pipeline**: Both Caddyfile configurations are embedded into the selected Tekton pipeline template (Konflux or Minikube) with proper YAML indentation
+6. **Validate**: The generated pipeline is validated to ensure it's syntactically correct YAML
+7. **Output**: A complete Tekton PipelineRun YAML is written to `/tmp/<app_name>-pipeline.yaml`
