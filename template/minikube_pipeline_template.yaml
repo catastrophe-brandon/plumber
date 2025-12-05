@@ -7,11 +7,11 @@ metadata:
   name: e2e-pipeline-run
 spec:
   params:
-    # Git repository configuration
+    # Git repository configurationhttps://github.com/catastrophe-brandon/tekton-playwright-e2e/pull/new/btweed/more-refinement
     - name: branch-name
       value: btweed/e2e
     - name: repo-url
-      value: https://github.com/RedHatInsights/learning-resources.git
+      value: {{repo_url}}
 
     # Application artifact to test
     - name: SOURCE_ARTIFACT
@@ -36,50 +36,12 @@ spec:
     # Custom proxy routes for this application (Caddy directives)
     - name: proxy-routes
       value: |
-        @root path /
-        handle @root {
-            reverse_proxy 127.0.0.1:9912
-        }
+        {{proxy_caddy_file}}
 
-        handle /index.html {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /apps/chrome* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /apps/learning-resources* {
-            reverse_proxy 127.0.0.1:8000
-        }
-
-        handle /settings/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /openshift/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /ansible/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /insights/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /edge/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /iam/learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
-
-        handle /learning-resources* {
-            reverse_proxy 127.0.0.1:9912
-        }
+    # Caddy config for the test application
+    - name: app-caddy-config
+      value: |
+        {{app_caddy_file}}
 
     # Optional: Override the default test script
     # - name: e2e-tests-script
