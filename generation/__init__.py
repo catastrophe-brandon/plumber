@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -104,8 +105,12 @@ def generate_pipeline_from_template(
         # First line stays at placeholder level, rest get the same indentation
         return lines[0] + ("\n" + "\n".join(indent + line if line else "" for line in lines[1:]) if len(lines) > 1 else "")
 
+    # Generate current date in user-readable format
+    generation_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
+    substituted_content = substituted_content.replace("{{generation_date}}", generation_date)
     substituted_content = substituted_content.replace("{{app_caddy_file}}",
         indent_multiline_replacement(app_caddy_file, "{{app_caddy_file}}", template_content))
     substituted_content = substituted_content.replace("{{proxy_caddy_file}}",
