@@ -2,7 +2,11 @@ import os
 
 import yaml
 
-from generation import generate_app_caddyfile, generate_frontend_proxy_caddyfile, generate_pipeline_from_template
+from generation import (
+    generate_app_caddyfile,
+    generate_frontend_proxy_caddyfile,
+    generate_pipeline_from_template,
+)
 
 
 def test_minikube_pipeline_generation_and_validation():
@@ -67,18 +71,24 @@ def test_minikube_pipeline_generation_and_validation():
         # Verify proxy routes Caddyfile was properly inserted
         proxy_routes = next((p for p in params if p["name"] == "proxy-routes"), None)
         assert proxy_routes is not None, "proxy-routes param not found"
-        assert "handle /settings/learning-resources*" in proxy_routes["value"], "Proxy route not found"
+        assert "handle /settings/learning-resources*" in proxy_routes["value"], (
+            "Proxy route not found"
+        )
         assert "reverse_proxy 127.0.0.1:9912" in proxy_routes["value"], "Chrome proxy not found"
 
         # Verify app Caddyfile was properly inserted
         app_caddy_param = next((p for p in params if p["name"] == "app-caddy-config"), None)
         assert app_caddy_param is not None, "app-caddy-config param not found"
-        assert "handle @settings_learning-resources_match" in app_caddy_param["value"], "App Caddyfile content not found"
+        assert "handle @settings_learning-resources_match" in app_caddy_param["value"], (
+            "App Caddyfile content not found"
+        )
 
         # Verify workspaces configuration
         workspaces = spec.get("workspaces", [])
         assert len(workspaces) > 0, "No workspaces found"
-        shared_workspace = next((w for w in workspaces if w["name"] == "shared-code-workspace"), None)
+        shared_workspace = next(
+            (w for w in workspaces if w["name"] == "shared-code-workspace"), None
+        )
         assert shared_workspace is not None, "shared-code-workspace not found"
 
         # Verify pipelineRef
@@ -88,7 +98,9 @@ def test_minikube_pipeline_generation_and_validation():
         # Verify taskRunSpecs for host aliases
         task_run_specs = spec.get("taskRunSpecs", [])
         assert len(task_run_specs) > 0, "No taskRunSpecs found"
-        e2e_task = next((t for t in task_run_specs if t["pipelineTaskName"] == "e2e-test-run"), None)
+        e2e_task = next(
+            (t for t in task_run_specs if t["pipelineTaskName"] == "e2e-test-run"), None
+        )
         assert e2e_task is not None, "e2e-test-run taskRunSpec not found"
 
         # Verify host aliases for stage.foo.redhat.com
@@ -96,7 +108,9 @@ def test_minikube_pipeline_generation_and_validation():
         assert len(host_aliases) > 0, "No hostAliases found"
         localhost_alias = next((ha for ha in host_aliases if "127.0.0.1" in ha.get("ip", "")), None)
         assert localhost_alias is not None, "localhost hostAlias not found"
-        assert "stage.foo.redhat.com" in localhost_alias.get("hostnames", []), "stage.foo.redhat.com not in hostnames"
+        assert "stage.foo.redhat.com" in localhost_alias.get("hostnames", []), (
+            "stage.foo.redhat.com not in hostnames"
+        )
 
     finally:
         # Clean up

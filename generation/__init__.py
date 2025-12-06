@@ -93,17 +93,21 @@ def generate_pipeline_from_template(
     def indent_multiline_replacement(content: str, placeholder: str, template: str) -> str:
         """Indent a multiline string to match the placeholder's indentation in the template."""
         # Find the indentation of the placeholder
-        for line in template.split('\n'):
+        for line in template.split("\n"):
             if placeholder in line:
                 # Get the whitespace before the placeholder
-                indent = line[:line.index(placeholder)]
+                indent = line[: line.index(placeholder)]
                 break
         else:
             indent = ""
 
         lines = content.split("\n")
         # First line stays at placeholder level, rest get the same indentation
-        return lines[0] + ("\n" + "\n".join(indent + line if line else "" for line in lines[1:]) if len(lines) > 1 else "")
+        return lines[0] + (
+            "\n" + "\n".join(indent + line if line else "" for line in lines[1:])
+            if len(lines) > 1
+            else ""
+        )
 
     # Generate current date in user-readable format
     generation_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
@@ -111,10 +115,14 @@ def generate_pipeline_from_template(
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
     substituted_content = substituted_content.replace("{{generation_date}}", generation_date)
-    substituted_content = substituted_content.replace("{{app_caddy_file}}",
-        indent_multiline_replacement(app_caddy_file, "{{app_caddy_file}}", template_content))
-    substituted_content = substituted_content.replace("{{proxy_caddy_file}}",
-        indent_multiline_replacement(proxy_caddy_file, "{{proxy_caddy_file}}", template_content))
+    substituted_content = substituted_content.replace(
+        "{{app_caddy_file}}",
+        indent_multiline_replacement(app_caddy_file, "{{app_caddy_file}}", template_content),
+    )
+    substituted_content = substituted_content.replace(
+        "{{proxy_caddy_file}}",
+        indent_multiline_replacement(proxy_caddy_file, "{{proxy_caddy_file}}", template_content),
+    )
 
     # Create output file in current directory
     output_filename = f"{app_name}-pull-request.yaml"
