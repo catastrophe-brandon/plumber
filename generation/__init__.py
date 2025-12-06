@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -84,34 +85,44 @@ def generate_pipeline_from_template(
     with open(pipeline_template_path) as f:
         template_content = f.read()
 
-    # Add proper indentation for YAML multiline strings
-    # The template uses 6 spaces of indentation for content inside literal blocks
-    # The placeholder already has indentation, so we only indent lines after the first
-    indent = "      "
+    # Perform substitutions with proper indentation
+    # The placeholders in the template are already indented, so we need to:
+    # 1. Keep the first line at the placeholder's indentation level
+    # 2. Indent subsequent lines to match
 
-    app_caddy_lines = app_caddy_file.split("\n")
-    app_caddy_indented = (
-        app_caddy_lines[0]
-        + "\n"
-        + "\n".join(indent + line if line else "" for line in app_caddy_lines[1:])
-        if len(app_caddy_lines) > 1
-        else app_caddy_lines[0]
-    )
+    def indent_multiline_replacement(content: str, placeholder: str, template: str) -> str:
+        """Indent a multiline string to match the placeholder's indentation in the template."""
+        # Find the indentation of the placeholder
+        for line in template.split("\n"):
+            if placeholder in line:
+                # Get the whitespace before the placeholder
+                indent = line[: line.index(placeholder)]
+                break
+        else:
+            indent = ""
 
-    proxy_caddy_lines = proxy_caddy_file.split("\n")
-    proxy_caddy_indented = (
-        proxy_caddy_lines[0]
-        + "\n"
-        + "\n".join(indent + line if line else "" for line in proxy_caddy_lines[1:])
-        if len(proxy_caddy_lines) > 1
-        else proxy_caddy_lines[0]
-    )
+        lines = content.split("\n")
+        # First line stays at placeholder level, rest get the same indentation
+        return lines[0] + (
+            "\n" + "\n".join(indent + line if line else "" for line in lines[1:])
+            if len(lines) > 1
+            else ""
+        )
 
-    # Perform substitutions
+    # Generate current date in user-readable format
+    generation_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+
     substituted_content = template_content.replace("{{app_name}}", app_name)
     substituted_content = substituted_content.replace("{{repo_url}}", repo_url)
-    substituted_content = substituted_content.replace("{{app_caddy_file}}", app_caddy_indented)
-    substituted_content = substituted_content.replace("{{proxy_caddy_file}}", proxy_caddy_indented)
+    substituted_content = substituted_content.replace("{{generation_date}}", generation_date)
+    substituted_content = substituted_content.replace(
+        "{{app_caddy_file}}",
+        indent_multiline_replacement(app_caddy_file, "{{app_caddy_file}}", template_content),
+    )
+    substituted_content = substituted_content.replace(
+        "{{proxy_caddy_file}}",
+        indent_multiline_replacement(proxy_caddy_file, "{{proxy_caddy_file}}", template_content),
+    )
 
     # Create output file in current directory
     output_filename = f"{app_name}-pull-request.yaml"

@@ -1,6 +1,5 @@
 # Caddyfile config for the application undergoing testing (This is NOT JSON)
 {
-  	{$CADDY_TLS_MODE}
   	auto_https disable_redirects
   	servers {
   		metrics
@@ -12,7 +11,6 @@
   }
 
   :8000 {
-  	{$CADDY_TLS_CERT}
   	log
 
   	# Handle main app route
@@ -29,11 +27,11 @@
 
     # Handle env based main route
     @env_match {
-        path {$ENV_PUBLIC_PATH}*
+        path /default*
     }
 
     handle @env_match {
-        uri strip_prefix {$ENV_PUBLIC_PATH}
+        uri strip_prefix /default
         file_server * {
             root /srv/dist
             browse
