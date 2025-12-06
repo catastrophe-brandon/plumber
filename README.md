@@ -137,7 +137,7 @@ Generated app Caddyfile:
     ...
 }
 
-Generated pipeline file: /tmp/learning-resources-pipeline.yaml
+Generated pipeline file: /Users/btweed/repos/hackathon/plumber/learning-resources-pull-request.yaml
 ```
 
 The generated pipeline file will be a complete, syntactically valid Tekton PipelineRun YAML with all route configurations embedded.
@@ -155,7 +155,7 @@ run_plumber(
     pipeline_template="template/konflux_pipeline_template.yaml",
     fec_config_path="fec_configs/fec.config.js"
 )
-# Generates pipeline at /tmp/learning-resources-pipeline.yaml
+# Generates pipeline at ./learning-resources-pull-request.yaml (in current directory)
 ```
 
 #### Generate Pipeline from Template
@@ -236,11 +236,17 @@ print(caddyfile_config)
 Tekton PipelineRun template for Konflux with placeholders:
 - `{{app_name}}`: Replaced with the application name
 - `{{repo_url}}`: Replaced with the repository URL
+- `{{generation_date}}`: Replaced with the date and time the pipeline was generated
 - `{{app_caddy_file}}`: Replaced with generated app Caddyfile content
 - `{{proxy_caddy_file}}`: Replaced with generated proxy routes Caddyfile snippets
 
 **Minikube Pipeline** (`template/minikube_pipeline_template.yaml`)
-Tekton PipelineRun template for Minikube (currently empty placeholder)
+Tekton PipelineRun template for Minikube with the same placeholders as Konflux:
+- `{{app_name}}`: Replaced with the application name
+- `{{repo_url}}`: Replaced with the repository URL
+- `{{generation_date}}`: Replaced with the date and time the pipeline was generated
+- `{{app_caddy_file}}`: Replaced with generated app Caddyfile content
+- `{{proxy_caddy_file}}`: Replaced with generated proxy routes Caddyfile snippets
 
 ### App Caddy Template (`template/app_caddy.template.j2`)
 
@@ -260,7 +266,7 @@ Jinja2 template for generating frontend proxy Caddyfile (currently not used; pro
 
 ## Testing
 
-The project includes a comprehensive test suite with 21 tests covering all functionality.
+The project includes a comprehensive test suite with 23 tests covering all functionality.
 
 Run all tests:
 ```bash
@@ -326,13 +332,18 @@ plumber/
 │   ├── minikube_pipeline_template.yaml  # Tekton pipeline template for Minikube
 │   ├── app_caddy.template.j2            # App Caddyfile Jinja2 template
 │   └── proxy_caddy.template.j2          # Proxy Caddyfile Jinja2 template (unused)
+├── scripts/
+│   ├── generate_learning_resources_pipeline.sh  # Example script for Konflux pipeline
+│   └── generate_minikube_pipeline.sh    # Example script for Minikube pipeline
 ├── tests/
 │   ├── test_pipeline_validation.py      # Pipeline YAML validation tests
 │   ├── test_cli_arguments.py            # CLI argument parsing tests
 │   ├── test_generate_pipeline.py        # Pipeline template substitution tests
 │   ├── test_get_app_url.py              # fec.config.js parsing tests
+│   ├── test_minikube_pipeline.py        # Minikube pipeline generation tests
 │   ├── test_generate_frontend_proxy_caddyfile.py  # Proxy generation tests (unused function)
 │   └── test_proxy_caddy_template.py     # Proxy template rendering tests (unused template)
+├── fec_configs/                         # Sample fec.config.js files for testing
 ├── pyproject.toml                       # Project configuration with CLI entry point
 └── README.md                            # This file
 ```
@@ -366,5 +377,6 @@ This includes:
    - Environment-based routing support
 4. **Generate Proxy Routes**: Programmatically generates Caddyfile route snippets for the frontend proxy with reverse_proxy directives
 5. **Embed in Pipeline**: Both Caddyfile configurations are embedded into the selected Tekton pipeline template (Konflux or Minikube) with proper YAML indentation
-6. **Validate**: The generated pipeline is validated to ensure it's syntactically correct YAML
-7. **Output**: A complete Tekton PipelineRun YAML is written to `/tmp/<app_name>-pipeline.yaml`
+6. **Add Metadata**: Adds the current generation date and time to the pipeline header
+7. **Validate**: The generated pipeline is validated to ensure it's syntactically correct YAML
+8. **Output**: A complete Tekton PipelineRun YAML is written to the current directory as `<app_name>-pull-request.yaml`
