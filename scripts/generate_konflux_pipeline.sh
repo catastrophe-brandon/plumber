@@ -3,7 +3,7 @@ set -e
 
 # Run plumber for learning-resources
 echo "Generating pipeline for learning-resources..."
-plumber learning-resources \
+uv run plumber learning-resources \
   https://github.com/RedHatInsights/learning-resources.git \
   --pipeline-template template/konflux_pipeline_template.yaml \
   --fec-config fec_configs/fec.config.js
