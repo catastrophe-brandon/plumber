@@ -333,7 +333,7 @@ plumber/
 │   ├── app_caddy.template.j2            # App Caddyfile Jinja2 template
 │   └── proxy_caddy.template.j2          # Proxy Caddyfile Jinja2 template (unused)
 ├── scripts/
-│   ├── generate_learning_resources_pipeline.sh  # Example script for Konflux pipeline
+│   ├── generate_konflux_pipeline.sh    # Example script for Konflux pipeline
 │   └── generate_minikube_pipeline.sh    # Example script for Minikube pipeline
 ├── tests/
 │   ├── test_pipeline_validation.py      # Pipeline YAML validation tests
