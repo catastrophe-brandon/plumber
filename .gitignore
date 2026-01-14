@@ -213,3 +213,4 @@ fec_configs/
 
 # Generated pipeline files
 *-pull-request.yaml
+/konflux-pipelines/
