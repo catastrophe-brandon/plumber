@@ -111,7 +111,9 @@ def generate_configmap(
         ConfigMap YAML as a string
     """
     # Indent each line of the Caddyfile content with 4 spaces (for YAML)
-    indented_content = "\n".join("    " + line if line else "" for line in caddyfile_content.split("\n"))
+    indented_content = "\n".join(
+        "    " + line if line else "" for line in caddyfile_content.split("\n")
+    )
 
     # Build namespace line if provided
     namespace_line = f"\n  namespace: {namespace}" if namespace else ""
