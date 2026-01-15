@@ -54,9 +54,6 @@ def test_proxy_caddy_template_rendering():
     assert "handle /index.html" in rendered
     assert "handle /apps/chrome*" in rendered
 
-    # Verify the final catch-all route
-    assert "handle /test-application*" in rendered
-
     print("Rendered Caddyfile:")
     print(rendered)
 
@@ -118,9 +115,8 @@ def test_proxy_caddy_template_route_count():
     # 3. /apps/chrome*
     # 4. /apps/{app_name}*
     # 5-7. route_paths (3 paths)
-    # 8. /{app_name}*
-    # Total: 8 handles
-    expected_count = 8
+    # Total: 7 handles
+    expected_count = 7
     assert handle_count == expected_count, (
         f"Expected {expected_count} handle directives, found {handle_count}"
     )

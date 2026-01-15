@@ -1,8 +1,8 @@
-from generation import generate_frontend_proxy_caddyfile
+from generation import generate_proxy_routes_caddyfile
 
 
-def test_generate_frontend_proxy_caddyfile():
-    """Test generating Caddyfile from app_url_value list."""
+def test_generate_proxy_routes_caddyfile():
+    """Test generating proxy routes Caddyfile from app_url_value list."""
     app_url_value = [
         "/settings/learning-resources",
         "/openshift/learning-resources",
@@ -13,7 +13,7 @@ def test_generate_frontend_proxy_caddyfile():
         "/learning-resources",
     ]
 
-    result = generate_frontend_proxy_caddyfile(
+    result = generate_proxy_routes_caddyfile(
         app_url_value=app_url_value, app_name="learning-resources"
     )
 
@@ -36,18 +36,15 @@ def test_generate_frontend_proxy_caddyfile():
     # Verify chrome port is used
     assert "reverse_proxy 127.0.0.1:9912" in result
 
-    # Verify catch-all route at the end
-    assert "handle /learning-resources*" in result
-
     print("Generated Caddyfile:")
     print(result)
 
 
-def test_generate_frontend_proxy_caddyfile_custom_ports():
+def test_generate_proxy_routes_caddyfile_custom_ports():
     """Test with custom ports."""
     app_url_value = ["/my-app"]
 
-    result = generate_frontend_proxy_caddyfile(
+    result = generate_proxy_routes_caddyfile(
         app_url_value=app_url_value,
         app_name="my-app",
         app_port="3000",

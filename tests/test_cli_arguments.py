@@ -4,29 +4,36 @@ from unittest.mock import patch
 
 import pytest
 
-# Import the main module to test argument parsing
 
-
-def test_pipeline_template_argument():
-    """Test that --pipeline-template argument is parsed correctly."""
+def test_configmap_name_arguments():
+    """Test that ConfigMap name arguments are parsed correctly."""
     test_args = [
         "test-app",
         "https://github.com/test/repo.git",
-        "--pipeline-template",
-        "template/konflux_pipeline_template.yaml",
+        "--app-configmap-name",
+        "test-app-caddy",
+        "--proxy-configmap-name",
+        "test-proxy-caddy",
     ]
 
     with patch.object(sys, "argv", ["plumber"] + test_args):
-        parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
+        parser = argparse.ArgumentParser(
+            description="Plumber - Generate Caddy ConfigMaps for application testing"
+        )
         parser.add_argument("app_name", type=str, help="Name of the application")
         parser.add_argument("repo_url", type=str, help="Git URL of the repository")
 
-        pipeline_group = parser.add_mutually_exclusive_group(required=True)
-        pipeline_group.add_argument(
-            "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
+        parser.add_argument(
+            "--app-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the app Caddy ConfigMap",
         )
-        pipeline_group.add_argument(
-            "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
+        parser.add_argument(
+            "--proxy-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the proxy routes Caddy ConfigMap",
         )
 
         parser.add_argument(
@@ -40,69 +47,37 @@ def test_pipeline_template_argument():
 
         assert args.app_name == "test-app"
         assert args.repo_url == "https://github.com/test/repo.git"
-        assert args.pipeline_template == "template/konflux_pipeline_template.yaml"
-        assert args.minikube_template is None
+        assert args.app_configmap_name == "test-app-caddy"
+        assert args.proxy_configmap_name == "test-proxy-caddy"
 
 
-def test_minikube_template_argument():
-    """Test that --minikube-template argument is parsed correctly."""
+def test_missing_app_configmap_name():
+    """Test that missing --app-configmap-name raises an error."""
     test_args = [
         "test-app",
         "https://github.com/test/repo.git",
-        "--minikube-template",
-        "template/minikube_pipeline_template.yaml",
+        "--proxy-configmap-name",
+        "test-proxy-caddy",
     ]
 
     with patch.object(sys, "argv", ["plumber"] + test_args):
-        parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
+        parser = argparse.ArgumentParser(
+            description="Plumber - Generate Caddy ConfigMaps for application testing"
+        )
         parser.add_argument("app_name", type=str, help="Name of the application")
         parser.add_argument("repo_url", type=str, help="Git URL of the repository")
-
-        pipeline_group = parser.add_mutually_exclusive_group(required=True)
-        pipeline_group.add_argument(
-            "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
-        )
-        pipeline_group.add_argument(
-            "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
-        )
 
         parser.add_argument(
-            "--fec-config",
+            "--app-configmap-name",
             type=str,
-            default="fec.config.js",
-            help="Path to fec.config.js file (default: fec.config.js)",
+            required=True,
+            help="Name for the app Caddy ConfigMap",
         )
-
-        args = parser.parse_args(test_args)
-
-        assert args.app_name == "test-app"
-        assert args.repo_url == "https://github.com/test/repo.git"
-        assert args.minikube_template == "template/minikube_pipeline_template.yaml"
-        assert args.pipeline_template is None
-
-
-def test_mutually_exclusive_templates():
-    """Test that providing both template arguments raises an error."""
-    test_args = [
-        "test-app",
-        "https://github.com/test/repo.git",
-        "--pipeline-template",
-        "template/konflux_pipeline_template.yaml",
-        "--minikube-template",
-        "template/minikube_pipeline_template.yaml",
-    ]
-
-    with patch.object(sys, "argv", ["plumber"] + test_args):
-        parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
-        parser.add_argument("app_name", type=str, help="Name of the application")
-        parser.add_argument("repo_url", type=str, help="Git URL of the repository")
-
-        pipeline_group = parser.add_mutually_exclusive_group(required=True)
-        pipeline_group.add_argument(
-            "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
-        )
-        pipeline_group.add_argument(
-            "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
+        parser.add_argument(
+            "--proxy-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the proxy routes Caddy ConfigMap",
         )
 
         parser.add_argument(
@@ -116,40 +91,44 @@ def test_mutually_exclusive_templates():
             parser.parse_args(test_args)
 
 
-def test_pipeline_type_determination_konflux():
-    """Test that pipeline_type is correctly set to 'konflux' when --pipeline-template is used."""
+def test_missing_proxy_configmap_name():
+    """Test that missing --proxy-configmap-name raises an error."""
+    test_args = [
+        "test-app",
+        "https://github.com/test/repo.git",
+        "--app-configmap-name",
+        "test-app-caddy",
+    ]
 
-    # Simulate parsed args
-    class Args:
-        pipeline_template = "template/konflux_pipeline_template.yaml"
-        minikube_template = None
+    with patch.object(sys, "argv", ["plumber"] + test_args):
+        parser = argparse.ArgumentParser(
+            description="Plumber - Generate Caddy ConfigMaps for application testing"
+        )
+        parser.add_argument("app_name", type=str, help="Name of the application")
+        parser.add_argument("repo_url", type=str, help="Git URL of the repository")
 
-    args = Args()
+        parser.add_argument(
+            "--app-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the app Caddy ConfigMap",
+        )
+        parser.add_argument(
+            "--proxy-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the proxy routes Caddy ConfigMap",
+        )
 
-    # Determine pipeline type
-    pipeline_template = args.pipeline_template or args.minikube_template
-    pipeline_type = "konflux" if args.pipeline_template else "minikube"
+        parser.add_argument(
+            "--fec-config",
+            type=str,
+            default="fec.config.js",
+            help="Path to fec.config.js file (default: fec.config.js)",
+        )
 
-    assert pipeline_template == "template/konflux_pipeline_template.yaml"
-    assert pipeline_type == "konflux"
-
-
-def test_pipeline_type_determination_minikube():
-    """Test that pipeline_type is correctly set to 'minikube' when --minikube-template is used."""
-
-    # Simulate parsed args
-    class Args:
-        pipeline_template = None
-        minikube_template = "template/minikube_pipeline_template.yaml"
-
-    args = Args()
-
-    # Determine pipeline type
-    pipeline_template = args.pipeline_template or args.minikube_template
-    pipeline_type = "konflux" if args.pipeline_template else "minikube"
-
-    assert pipeline_template == "template/minikube_pipeline_template.yaml"
-    assert pipeline_type == "minikube"
+        with pytest.raises(SystemExit):
+            parser.parse_args(test_args)
 
 
 def test_fec_config_default():
@@ -157,21 +136,30 @@ def test_fec_config_default():
     test_args = [
         "test-app",
         "https://github.com/test/repo.git",
-        "--pipeline-template",
-        "template/konflux_pipeline_template.yaml",
+        "--app-configmap-name",
+        "test-app-caddy",
+        "--proxy-configmap-name",
+        "test-proxy-caddy",
     ]
 
     with patch.object(sys, "argv", ["plumber"] + test_args):
-        parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
+        parser = argparse.ArgumentParser(
+            description="Plumber - Generate Caddy ConfigMaps for application testing"
+        )
         parser.add_argument("app_name", type=str, help="Name of the application")
         parser.add_argument("repo_url", type=str, help="Git URL of the repository")
 
-        pipeline_group = parser.add_mutually_exclusive_group(required=True)
-        pipeline_group.add_argument(
-            "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
+        parser.add_argument(
+            "--app-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the app Caddy ConfigMap",
         )
-        pipeline_group.add_argument(
-            "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
+        parser.add_argument(
+            "--proxy-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the proxy routes Caddy ConfigMap",
         )
 
         parser.add_argument(
@@ -191,23 +179,32 @@ def test_fec_config_custom_path():
     test_args = [
         "test-app",
         "https://github.com/test/repo.git",
-        "--pipeline-template",
-        "template/konflux_pipeline_template.yaml",
+        "--app-configmap-name",
+        "test-app-caddy",
+        "--proxy-configmap-name",
+        "test-proxy-caddy",
         "--fec-config",
         "custom/path/fec.config.js",
     ]
 
     with patch.object(sys, "argv", ["plumber"] + test_args):
-        parser = argparse.ArgumentParser(description="Plumber - Pipeline management tool")
+        parser = argparse.ArgumentParser(
+            description="Plumber - Generate Caddy ConfigMaps for application testing"
+        )
         parser.add_argument("app_name", type=str, help="Name of the application")
         parser.add_argument("repo_url", type=str, help="Git URL of the repository")
 
-        pipeline_group = parser.add_mutually_exclusive_group(required=True)
-        pipeline_group.add_argument(
-            "--pipeline-template", type=str, help="Path to the Konflux pipeline template file"
+        parser.add_argument(
+            "--app-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the app Caddy ConfigMap",
         )
-        pipeline_group.add_argument(
-            "--minikube-template", type=str, help="Path to the Minikube pipeline template file"
+        parser.add_argument(
+            "--proxy-configmap-name",
+            type=str,
+            required=True,
+            help="Name for the proxy routes Caddy ConfigMap",
         )
 
         parser.add_argument(

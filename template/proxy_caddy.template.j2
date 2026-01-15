@@ -1,8 +1,3 @@
-# Caddyfile template for frontend-development-proxy sidecar
-# Note:
-# Port {{ chrome_port }} - Resources from insights-chrome-dev image
-# Port {{ app_port }} - Resources from application to test
-
 @root path /
 handle @root {
     reverse_proxy 127.0.0.1:{{ chrome_port }}
@@ -24,8 +19,3 @@ handle {{ route_path }}* {
     reverse_proxy 127.0.0.1:{{ chrome_port }}
 }
 {% endfor %}
-
-# Catch all for paths that don't match
-handle /{{ app_name }}* {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
