@@ -456,6 +456,23 @@ This includes:
 - ruff >= 0.14.0
 - pyyaml >= 6.0.0
 
+### Git Hooks
+
+Set up pre-commit hooks to automatically run linting and formatting checks:
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This installs a pre-commit hook that:
+- Runs `ruff check .` before each commit
+- Runs `ruff format . --check` before each commit
+- Prevents commits if issues are found
+
+To bypass the hook (not recommended), use:
+```bash
+git commit --no-verify
+```
+
 ## How It Works
 
 1. **Read Configuration**: Plumber first checks for `frontend.yaml`, then falls back to `fec.config.js` to extract application paths
