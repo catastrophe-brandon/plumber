@@ -16,6 +16,6 @@ handle /apps/{{ app_name }}* {
 }
 {% for route_path in route_prefixes %}
 handle {{ route_path }}* {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
+    reverse_proxy 127.0.0.1:{{ app_port }}
 }
 {% endfor %}

@@ -60,29 +60,30 @@
       }
   }
 
-  # Beginning of dynamically-generated {{ app_name }} routes with route prefixes
-  {% for route_path_prefix in route_path_prefixes %}
-    @{{ route_path_prefix }}_{{ app_name }}_match {
-      path /{{ route_path_prefix }}/{{ app_name }} /{{ route_path_prefix }}/{{ app_name }}/
+  # Beginning of dynamically-generated {{ app_name }} routes from appUrl
+  {%- for app_url in app_urls %}
+    {%- set route_name = app_url.strip('/').replace('/', '_') %}
+    @{{ route_name }}_match {
+      path {{ app_url }} {{ app_url }}/
     }
-    handle @{{ route_path_prefix }}_{{ app_name }}_match {
-        uri strip_prefix /{{ route_path_prefix }}/{{ app_name }}
+    handle @{{ route_name }}_match {
+        uri strip_prefix {{ app_url }}
         rewrite / /index.html
         file_server * {
             root /srv/dist
         }
     }
 
-    @{{ route_path_prefix }}_{{ app_name }}_subpath {
-        path /{{ route_path_prefix }}/{{ app_name }}/*
+    @{{ route_name }}_subpath {
+        path {{ app_url }}/*
     }
-    handle @{{ route_path_prefix }}_{{ app_name }}_subpath {
-        uri strip_prefix /{{ route_path_prefix }}/{{ app_name }}
+    handle @{{ route_name }}_subpath {
+        uri strip_prefix {{ app_url }}
         file_server * {
             root /srv/dist
         }
     }
-  {% endfor %}
+  {%- endfor %}
 
   # Handle the root path
   handle / {
