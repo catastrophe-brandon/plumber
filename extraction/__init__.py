@@ -3,8 +3,6 @@ import os
 
 import yaml
 
-import yaml
-
 
 def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str] | None:
     """
