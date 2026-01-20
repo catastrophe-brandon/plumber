@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from extraction import get_app_url_from_fec_config
+from extraction import get_app_url_from_fec_config, get_app_url_from_frontend_yaml
 from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
 
 
@@ -11,6 +11,7 @@ def run_plumber(
     app_configmap_name: str,
     proxy_configmap_name: str,
     fec_config_path: str = "fec.config.js",
+    frontend_yaml_path: str = "deploy/frontend.yaml",
     namespace: str | None = None,
 ):
     print("Hello from plumber!")
@@ -25,13 +26,28 @@ def run_plumber(
     app_port = "8000"
     chrome_port = "9912"
 
-    # Try to get appUrl from fec.config.js
+    # Try to get appUrl from frontend.yaml first (for older repos)
+    app_url_value = None
     try:
-        app_url_value = get_app_url_from_fec_config(fec_config_path)
-        print(f"Found appUrl in {fec_config_path}: {app_url_value}")
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Warning: Could not read {fec_config_path} ({e}), using default routes")
+        app_url_value = get_app_url_from_frontend_yaml(frontend_yaml_path)
+        if app_url_value:
+            print(f"Found paths in {frontend_yaml_path}: {app_url_value}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Note: Could not read {frontend_yaml_path}, trying fec.config.js")
+
+    # Fall back to fec.config.js if frontend.yaml didn't provide paths
+    if not app_url_value:
+        try:
+            app_url_value = get_app_url_from_fec_config(fec_config_path)
+            if app_url_value:
+                print(f"Found appUrl in {fec_config_path}: {app_url_value}")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Warning: Could not read {fec_config_path} ({e}), using default routes")
+
+    # Use default if neither file provided paths
+    if not app_url_value:
         app_url_value = [f"/{app_name}"]
+        print(f"Using default routes: {app_url_value}")
 
     # Generate app Caddy ConfigMap
     app_configmap_path = generate_app_caddy_configmap(
@@ -83,6 +99,13 @@ def main():
     )
 
     parser.add_argument(
+        "--frontend-yaml",
+        type=str,
+        default="deploy/frontend.yaml",
+        help="Path to frontend.yaml file (default: deploy/frontend.yaml)",
+    )
+
+    parser.add_argument(
         "--namespace",
         type=str,
         default=None,
@@ -97,6 +120,7 @@ def main():
         args.app_configmap_name,
         args.proxy_configmap_name,
         args.fec_config,
+        args.frontend_yaml,
         args.namespace,
     )
 

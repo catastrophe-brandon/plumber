@@ -1,5 +1,6 @@
 import json
 import os
+import yaml
 
 
 def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str] | None:
@@ -10,7 +11,8 @@ def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str]
         config_path: Path to the fec.config.js file (default: "fec.config.js")
 
     Returns:
-        The appUrl value from fec.config.js, or None if not found
+        The appUrl value from fec.config.js as a list, or None if not found.
+        If appUrl is a string, it will be wrapped in a list.
 
     Raises:
         FileNotFoundError: If fec.config.js is not found
@@ -22,29 +24,109 @@ def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str]
     with open(config_path) as f:
         content = f.read()
 
-    # Find appUrl: [ ... ] pattern
+    # Find appUrl: pattern
     start_marker = "appUrl:"
     start = content.find(start_marker)
     if start == -1:
         return None
 
-    # Find the opening bracket
-    bracket_start = content.find("[", start)
-    if bracket_start == -1:
+    # Skip past "appUrl:" and any whitespace
+    value_start = start + len(start_marker)
+    value_start_content = content[value_start:].lstrip()
+
+    # Check if it's an array or a string
+    if value_start_content.startswith("["):
+        # Handle array case: appUrl: [ ... ]
+        bracket_start = content.find("[", start)
+        bracket_end = content.find("]", bracket_start)
+        if bracket_end == -1:
+            return None
+
+        # Extract the array content and convert to valid JSON
+        array_content = content[bracket_start : bracket_end + 1]
+        # Replace single quotes with double quotes for JSON compatibility
+        array_content = array_content.replace("'", '"')
+        # Remove trailing commas (JavaScript allows them, JSON doesn't)
+        import re
+        array_content = re.sub(r",(\s*])", r"\1", array_content)
+        return json.loads(array_content)
+
+    elif value_start_content.startswith("'") or value_start_content.startswith('"'):
+        # Handle string case: appUrl: '/some/path' or appUrl: "/some/path"
+        quote_char = value_start_content[0]
+        string_start = content.find(quote_char, value_start)
+        string_end = content.find(quote_char, string_start + 1)
+        if string_end == -1:
+            return None
+
+        # Extract the string value
+        url_value = content[string_start + 1 : string_end]
+        # Return as a single-element list
+        return [url_value]
+
+    else:
+        # Unknown format
         return None
 
-    # Find the matching closing bracket
-    bracket_end = content.find("]", bracket_start)
-    if bracket_end == -1:
-        return None
 
-    # Extract the array content and convert to valid JSON
-    array_content = content[bracket_start : bracket_end + 1]
-    # Replace single quotes with double quotes for JSON compatibility
-    # This handles JavaScript string literals which can use single quotes
-    array_content = array_content.replace("'", '"')
-    # Remove trailing commas (JavaScript allows them, JSON doesn't)
-    import re
+def get_app_url_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> list[str] | None:
+    """
+    Extract application paths from frontend.yaml file.
 
-    array_content = re.sub(r",(\s*])", r"\1", array_content)
-    return json.loads(array_content)
+    This extracts paths from:
+    - spec.frontend.paths[]
+    - spec.module.modules[].routes[].pathname
+
+    Args:
+        yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
+
+    Returns:
+        List of unique application paths, or None if not found
+
+    Raises:
+        FileNotFoundError: If frontend.yaml is not found
+    """
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"frontend.yaml not found at: {yaml_path}")
+
+    # Read and parse the YAML file
+    with open(yaml_path) as f:
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML file: {e}")
+
+    paths = []
+
+    # Navigate to the Frontend spec
+    # The file is a Template with objects array
+    if "objects" in data and isinstance(data["objects"], list):
+        for obj in data["objects"]:
+            if obj.get("kind") == "Frontend":
+                spec = obj.get("spec", {})
+
+                # Extract from spec.frontend.paths[]
+                frontend_paths = spec.get("frontend", {}).get("paths", [])
+                if isinstance(frontend_paths, list):
+                    paths.extend(frontend_paths)
+
+                # Extract from spec.module.modules[].routes[].pathname
+                modules = spec.get("module", {}).get("modules", [])
+                if isinstance(modules, list):
+                    for module in modules:
+                        routes = module.get("routes", [])
+                        if isinstance(routes, list):
+                            for route in routes:
+                                pathname = route.get("pathname")
+                                if pathname:
+                                    paths.append(pathname)
+
+    # Return unique paths, preserving order
+    seen = set()
+    unique_paths = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            unique_paths.append(path)
+
+    return unique_paths if unique_paths else None

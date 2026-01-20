@@ -4,7 +4,7 @@ Hackathon tool - Automatically generate Kubernetes ConfigMaps with Caddy configu
 
 ## Overview
 
-Plumber automates the process of generating Kubernetes ConfigMap YAML files containing Caddyfile configurations for frontend applications. It reads your application's `fec.config.js` file, extracts route configurations, and generates ConfigMaps ready to be used in any testing environment (Tekton, Kubernetes, Minikube, etc.).
+Plumber automates the process of generating Kubernetes ConfigMap YAML files containing Caddyfile configurations for frontend applications. It reads your application's configuration files (`frontend.yaml` or `fec.config.js`), extracts route configurations, and generates ConfigMaps ready to be used in any testing environment (Tekton, Kubernetes, Minikube, etc.).
 
 ## Features
 
@@ -26,9 +26,14 @@ Plumber automates the process of generating Kubernetes ConfigMap YAML files cont
   - Handles multiple route prefixes
 
 ### Configuration Extraction
-- Parse JavaScript `fec.config.js` files to extract application URLs
-- Handles both single and double quotes
-- Removes trailing commas for JSON compatibility
+- **Frontend YAML Support**: Parse `frontend.yaml` (or `frontend.yml`) to extract paths from:
+  - `spec.frontend.paths[]`
+  - `spec.module.modules[].routes[].pathname`
+- **FEC Config Support**: Parse JavaScript `fec.config.js` files to extract application URLs
+  - Supports both string and array formats: `appUrl: '/path'` or `appUrl: ['/path1', '/path2']`
+  - Handles both single and double quotes
+  - Removes trailing commas for JSON compatibility
+- **Priority Order**: Checks `frontend.yaml` first (for older repos), falls back to `fec.config.js`, then defaults
 - Supports complex route configurations
 
 ## Installation
@@ -50,6 +55,7 @@ Once installed, you can use the `plumber` command from anywhere:
 plumber <app_name> <repo_url> \
   --app-configmap-name <name> \
   --proxy-configmap-name <name> \
+  [--frontend-yaml <path>] \
   [--fec-config <path>] \
   [--namespace <namespace>]
 ```
@@ -59,8 +65,11 @@ plumber <app_name> <repo_url> \
 - `repo_url`: Git URL of the repository (e.g., "https://github.com/user/repo.git")
 - `--app-configmap-name`: (Required) Name for the app Caddy ConfigMap
 - `--proxy-configmap-name`: (Required) Name for the proxy routes Caddy ConfigMap
+- `--frontend-yaml`: (Optional) Path to frontend.yaml file (default: "deploy/frontend.yaml")
 - `--fec-config`: (Optional) Path to fec.config.js file (default: "fec.config.js")
 - `--namespace`: (Optional) Kubernetes namespace for the ConfigMaps
+
+**Note:** Plumber checks `--frontend-yaml` first, then falls back to `--fec-config` if frontend.yaml is not found or doesn't contain paths.
 
 **Example:**
 ```bash
@@ -117,6 +126,19 @@ print(f"Generated: {app_configmap_path}")
 print(f"Generated: {proxy_configmap_path}")
 ```
 
+#### Extract paths from frontend.yaml
+
+```python
+from extraction import get_app_url_from_frontend_yaml
+
+# Use default path (deploy/frontend.yaml in current directory)
+app_urls = get_app_url_from_frontend_yaml()
+
+# Or specify a custom path
+app_urls = get_app_url_from_frontend_yaml("path/to/deploy/frontend.yaml")
+# Returns: ['/apps/my-app', '/staging/my-app', ...]
+```
+
 #### Extract appUrl from fec.config.js
 
 ```python
@@ -128,6 +150,7 @@ app_urls = get_app_url_from_fec_config()
 # Or specify a custom path
 app_urls = get_app_url_from_fec_config("path/to/fec.config.js")
 # Returns: ['/settings/my-app', '/openshift/my-app', ...]
+# Supports both string and array formats for appUrl
 ```
 
 #### Generate App Caddyfile
@@ -275,12 +298,12 @@ data:
     }
 
     handle /settings/learning-resources* {
-        reverse_proxy 127.0.0.1:9912
+        reverse_proxy 127.0.0.1:8000
     }
     ...
 ```
 
-**Note:** The proxy ConfigMap uses `routes` as the data key instead of `Caddyfile` to match production deployment patterns.
+**Note:** The proxy ConfigMap uses `routes` as the data key instead of `Caddyfile` to match production deployment patterns. All application routes from `appUrl` are proxied to port 8000 (the app container), while Chrome/shell resources are proxied to port 9912.
 
 ## Using the ConfigMaps
 
@@ -319,21 +342,21 @@ containers:
 
 Jinja2 template for generating the application sidecar Caddyfile with variables:
 - `app_name`: Application name
-- `route_path_prefixes`: List of route prefixes extracted from appUrl (e.g., `["settings", "openshift", "iam"]`)
+- `app_urls`: List of exact application URL paths (e.g., `["/settings/my-app", "/staging/my-app", "/apps/my-app"]`)
 
 Generates a complete Caddyfile with:
 - Global TLS and metrics configuration
 - Metrics server on port 9000
 - Application server on port 8000
-- Route handlers for each route prefix
+- Route handlers for each exact URL path from configuration files
 
 ### Proxy Caddy Template (`template/proxy_caddy.template.j2`)
 
 Jinja2 template for generating frontend proxy Caddyfile with variables:
 - `app_name`: Application name
-- `app_port`: Port for application resources
-- `chrome_port`: Port for Chrome/shell resources
-- `route_prefixes`: List of route paths from appUrl
+- `app_port`: Port for application resources (default: 8000)
+- `chrome_port`: Port for Chrome/shell resources (default: 9912)
+- `route_prefixes`: List of exact route paths to proxy to the application
 
 ## Testing
 
@@ -395,7 +418,7 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs automatically on pus
 plumber/
 ├── main.py                              # Main application code with CLI entry point
 ├── extraction/
-│   └── __init__.py                      # fec.config.js parsing functions
+│   └── __init__.py                      # frontend.yaml and fec.config.js parsing functions
 ├── generation/
 │   └── __init__.py                      # Caddyfile and ConfigMap generation functions
 ├── template/
@@ -435,12 +458,17 @@ This includes:
 
 ## How It Works
 
-1. **Read Configuration**: Plumber reads your application's `fec.config.js` file and extracts the `appUrl` array
-2. **Extract Route Prefixes**: Analyzes the appUrl routes to extract route prefixes (e.g., `settings`, `openshift`, `iam`)
-3. **Generate App Caddyfile**: Uses the `app_caddy.template.j2` Jinja2 template to create a complete Caddy server configuration
-4. **Generate Proxy Routes**: Uses the `proxy_caddy.template.j2` Jinja2 template to create reverse_proxy directives for the frontend proxy
-5. **Wrap in ConfigMaps**: Both Caddyfile configurations are wrapped in Kubernetes ConfigMap YAML structures
-6. **Output**: Two complete ConfigMap YAML files are written to the current directory
+1. **Read Configuration**: Plumber first checks for `frontend.yaml`, then falls back to `fec.config.js` to extract application paths
+   - **frontend.yaml**: Extracts from `spec.frontend.paths[]` and `spec.module.modules[].routes[].pathname`
+   - **fec.config.js**: Extracts the `appUrl` value (supports both string and array formats)
+2. **Generate App Caddyfile**: Uses the `app_caddy.template.j2` Jinja2 template to create a complete Caddy server configuration
+   - Creates route handlers for each exact URL path from the configuration
+   - Handles path stripping, index.html rewriting, and static file serving
+3. **Generate Proxy Routes**: Uses the `proxy_caddy.template.j2` Jinja2 template to create reverse_proxy directives for the frontend proxy
+   - Routes all application paths to port 8000 (the test app container)
+   - Routes Chrome/shell resources to port 9912
+4. **Wrap in ConfigMaps**: Both Caddyfile configurations are wrapped in Kubernetes ConfigMap YAML structures
+5. **Output**: Two complete ConfigMap YAML files are written to the current directory
 
 ## Benefits
 

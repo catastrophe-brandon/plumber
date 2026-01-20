@@ -24,35 +24,16 @@ def generate_app_caddyfile(
     Returns:
         Rendered Caddyfile configuration as a string
     """
-    # Extract route path prefixes from app URLs
-    # E.g., "/settings/learning-resources" -> "settings"
-    # E.g., "/openshift/learning-resources" -> "openshift"
-    # Skip routes that are just "/{app_name}" or "/{app_name}/..." (no prefix)
-    route_path_prefixes = []
-    for route in app_url_value:
-        parts = route.strip("/").split("/")
-        # Only process routes that end with the app_name
-        # E.g., "/settings/learning-resources" -> ["settings", "learning-resources"]
-        # E.g., "/learning-resources" -> ["learning-resources"]
-        # E.g., "/learning-resources/creator" -> skip (doesn't end with app_name)
-        if len(parts) >= 1 and parts[-1] == app_name:
-            if len(parts) == 2:
-                # Route like "/settings/learning-resources" -> prefix is "settings"
-                prefix = parts[0]
-                if prefix not in route_path_prefixes:
-                    route_path_prefixes.append(prefix)
-            # If len(parts) == 1, it's just "/{app_name}", no prefix to add
-
     # Set up Jinja2 environment
     template_dir = os.path.dirname(template_path)
     template_file = os.path.basename(template_path)
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template(template_file)
 
-    # Render the template
+    # Render the template with the exact app URLs from fec.config.js
     rendered = template.render(
         app_name=app_name,
-        route_path_prefixes=route_path_prefixes,
+        app_urls=app_url_value,
     )
 
     return rendered
