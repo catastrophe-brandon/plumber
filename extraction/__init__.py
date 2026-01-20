@@ -1,5 +1,6 @@
 import json
 import os
+import yaml
 
 import yaml
 
@@ -49,7 +50,6 @@ def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str]
         array_content = array_content.replace("'", '"')
         # Remove trailing commas (JavaScript allows them, JSON doesn't)
         import re
-
         array_content = re.sub(r",(\s*])", r"\1", array_content)
         return json.loads(array_content)
 
