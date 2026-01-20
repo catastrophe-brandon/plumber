@@ -12,7 +12,10 @@ Plumber automates the process of generating Kubernetes ConfigMap YAML files cont
 - Generate Kubernetes ConfigMap YAML files with embedded Caddyfile configurations
 - Two separate ConfigMaps: one for the application server, one for the frontend proxy
 - User-specified ConfigMap names for flexibility
-- YAML validation to ensure syntactically correct output
+- Automatic YAML validation using yamllint after generation
+  - Validates all generated ConfigMaps
+  - Fails the generation process if validation fails
+  - Ensures files pass pipeline linters (no trailing spaces, valid syntax)
 
 ### Caddyfile Generation
 - **App Caddyfile**: Uses Jinja2 template to generate Caddy server configuration for serving your application's static files
@@ -442,6 +445,7 @@ plumber/
 - Python >= 3.12
 - jinja2 >= 3.0.0
 - gitpython >= 3.1.0
+- yamllint >= 1.35.0 (for YAML validation of generated ConfigMaps)
 - pyyaml >= 6.0.0 (for YAML validation in tests)
 
 ## Development
@@ -485,7 +489,11 @@ git commit --no-verify
    - Routes all application paths to port 8000 (the test app container)
    - Routes Chrome/shell resources to port 9912
 4. **Wrap in ConfigMaps**: Both Caddyfile configurations are wrapped in Kubernetes ConfigMap YAML structures
-5. **Output**: Two complete ConfigMap YAML files are written to the current directory
+5. **Validate YAML**: Each generated ConfigMap is automatically validated using yamllint
+   - Uses relaxed validation rules
+   - Fails immediately if validation errors are found (trailing spaces, syntax errors, etc.)
+   - Ensures generated files will pass pipeline linters
+6. **Output**: Two complete, validated ConfigMap YAML files are written to the current directory
 
 ## Benefits
 

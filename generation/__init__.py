@@ -1,6 +1,39 @@
 import os
+import subprocess
+import sys
 
 from jinja2 import Environment, FileSystemLoader
+
+
+def validate_yaml_file(file_path: str) -> None:
+    """
+    Validate a YAML file using yamllint.
+
+    Args:
+        file_path: Path to the YAML file to validate
+
+    Raises:
+        SystemExit: If yamllint validation fails
+    """
+    try:
+        result = subprocess.run(
+            ["yamllint", "-d", "relaxed", file_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            print(f"❌ YAML validation failed for {file_path}:", file=sys.stderr)
+            print(result.stdout, file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            sys.exit(1)
+
+        print(f"✅ YAML validation passed: {file_path}")
+
+    except FileNotFoundError:
+        print("⚠️  Warning: yamllint not found. Skipping YAML validation.", file=sys.stderr)
+        print("   Install with: pip install yamllint", file=sys.stderr)
 
 
 def generate_app_caddyfile(
@@ -148,6 +181,9 @@ def generate_app_caddy_configmap(
     with open(output_path, "w") as f:
         f.write(configmap_yaml)
 
+    # Validate the generated YAML
+    validate_yaml_file(output_path)
+
     return output_path
 
 
@@ -192,5 +228,8 @@ def generate_proxy_caddy_configmap(
 
     with open(output_path, "w") as f:
         f.write(configmap_yaml)
+
+    # Validate the generated YAML
+    validate_yaml_file(output_path)
 
     return output_path

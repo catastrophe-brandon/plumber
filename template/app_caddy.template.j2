@@ -61,7 +61,7 @@
   }
 
   # Beginning of dynamically-generated {{ app_name }} routes from appUrl
-  {% for app_url in app_urls %}
+  {%- for app_url in app_urls %}
     {%- set route_name = app_url.strip('/').replace('/', '_') %}
     @{{ route_name }}_match {
       path {{ app_url }} {{ app_url }}/
@@ -83,7 +83,7 @@
             root /srv/dist
         }
     }
-  {% endfor %}
+  {%- endfor %}
 
   # Handle the root path
   handle / {
