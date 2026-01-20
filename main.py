@@ -32,7 +32,7 @@ def run_plumber(
         app_url_value = get_app_url_from_frontend_yaml(frontend_yaml_path)
         if app_url_value:
             print(f"Found paths in {frontend_yaml_path}: {app_url_value}")
-    except (FileNotFoundError, ValueError) as e:
+    except (FileNotFoundError, ValueError):
         print(f"Note: Could not read {frontend_yaml_path}, trying fec.config.js")
 
     # Fall back to fec.config.js if frontend.yaml didn't provide paths
