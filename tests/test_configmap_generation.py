@@ -271,3 +271,200 @@ def test_configmap_with_namespace():
             os.remove(app_path)
         if os.path.exists(proxy_path):
             os.remove(proxy_path)
+
+
+def test_fallback_from_frontend_yaml_to_fec_config(tmp_path):
+    """Test that when frontend.yaml is missing, it falls back to fec.config.js."""
+    import shutil
+
+    test_app_name = "fallback-app"
+
+    # Create a test fec.config.js file
+    test_fec_content = """module.exports = {
+  appUrl: ['/fallback-app', '/settings/fallback-app'],
+  debug: true,
+};
+"""
+
+    # Create temporary fec.config.js
+    fec_config_path = tmp_path / "fec.config.js"
+    fec_config_path.write_text(test_fec_content)
+
+    # Import the main function
+    from main import run_plumber
+
+    # Use a non-existent frontend.yaml path to trigger fallback
+    nonexistent_yaml = str(tmp_path / "nonexistent_frontend.yaml")
+
+    # Save current directory and change to tmp_path
+    original_dir = os.getcwd()
+    try:
+        # Copy template directory to tmp_path so templates can be found
+        shutil.copytree(os.path.join(original_dir, "template"), tmp_path / "template")
+
+        os.chdir(tmp_path)
+
+        # Run plumber with missing frontend.yaml but valid fec.config.js
+        run_plumber(
+            app_name=test_app_name,
+            repo_url="https://github.com/test/repo",
+            app_configmap_name="fallback-app-caddy",
+            proxy_configmap_name="fallback-proxy-caddy",
+            fec_config_path=str(fec_config_path),
+            frontend_yaml_path=nonexistent_yaml,
+        )
+
+        # Verify the generated ConfigMaps use fec.config.js values
+        app_path = tmp_path / "fallback-app-caddy.yaml"
+        proxy_path = tmp_path / "fallback-proxy-caddy.yaml"
+
+        assert app_path.exists(), "App ConfigMap should be generated"
+        assert proxy_path.exists(), "Proxy ConfigMap should be generated"
+
+        # Parse and verify app ConfigMap contains routes from fec.config.js
+        app_configmap = yaml.safe_load(app_path.read_text())
+        app_data = app_configmap["data"]["Caddyfile"]
+        assert "fallback-app" in app_data
+
+        # Parse and verify proxy ConfigMap contains routes from fec.config.js
+        proxy_configmap = yaml.safe_load(proxy_path.read_text())
+        proxy_data = proxy_configmap["data"]["routes"]
+        assert "handle /fallback-app*" in proxy_data
+        assert "handle /settings/fallback-app*" in proxy_data
+
+    finally:
+        # Restore original directory
+        os.chdir(original_dir)
+
+
+def test_fallback_to_default_when_both_missing(tmp_path):
+    """Test that when both frontend.yaml and fec.config.js are missing, default routes are used."""
+    import shutil
+
+    test_app_name = "default-routes-app"
+
+    # Import the main function
+    from main import run_plumber
+
+    # Use non-existent paths for both files
+    nonexistent_yaml = str(tmp_path / "nonexistent_frontend.yaml")
+    nonexistent_fec = str(tmp_path / "nonexistent_fec.config.js")
+
+    # Save current directory and change to tmp_path
+    original_dir = os.getcwd()
+    try:
+        # Copy template directory to tmp_path so templates can be found
+        shutil.copytree(os.path.join(original_dir, "template"), tmp_path / "template")
+
+        os.chdir(tmp_path)
+
+        # Run plumber with both files missing
+        run_plumber(
+            app_name=test_app_name,
+            repo_url="https://github.com/test/repo",
+            app_configmap_name="default-app-caddy",
+            proxy_configmap_name="default-proxy-caddy",
+            fec_config_path=nonexistent_fec,
+            frontend_yaml_path=nonexistent_yaml,
+        )
+
+        # Verify the generated ConfigMaps use default routes
+        app_path = tmp_path / "default-app-caddy.yaml"
+        proxy_path = tmp_path / "default-proxy-caddy.yaml"
+
+        assert app_path.exists(), "App ConfigMap should be generated"
+        assert proxy_path.exists(), "Proxy ConfigMap should be generated"
+
+        # Parse and verify app ConfigMap contains default route
+        app_configmap = yaml.safe_load(app_path.read_text())
+        app_data = app_configmap["data"]["Caddyfile"]
+        assert test_app_name in app_data
+
+        # Parse and verify proxy ConfigMap contains default route
+        proxy_configmap = yaml.safe_load(proxy_path.read_text())
+        proxy_data = proxy_configmap["data"]["routes"]
+        # Default route should be /{app_name}
+        assert f"handle /{test_app_name}*" in proxy_data
+
+    finally:
+        # Restore original directory
+        os.chdir(original_dir)
+
+
+def test_frontend_yaml_takes_precedence_over_fec_config(tmp_path):
+    """Test that when both frontend.yaml and fec.config.js exist, frontend.yaml takes precedence."""
+    import shutil
+
+    test_app_name = "precedence-app"
+
+    # Create a test frontend.yaml with specific paths
+    frontend_yaml_content = """apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: test-template
+objects:
+  - apiVersion: cloud.redhat.com/v1alpha1
+    kind: Frontend
+    metadata:
+      name: precedence-app
+    spec:
+      frontend:
+        paths:
+          - /yaml-path-1
+          - /yaml-path-2
+"""
+
+    # Create a test fec.config.js with different paths
+    fec_config_content = """module.exports = {
+  appUrl: ['/fec-path-1', '/fec-path-2'],
+};
+"""
+
+    # Create temporary files
+    yaml_path = tmp_path / "frontend.yaml"
+    yaml_path.write_text(frontend_yaml_content)
+
+    fec_path = tmp_path / "fec.config.js"
+    fec_path.write_text(fec_config_content)
+
+    # Import the main function
+    from main import run_plumber
+
+    # Save current directory and change to tmp_path
+    original_dir = os.getcwd()
+    try:
+        # Copy template directory to tmp_path so templates can be found
+        shutil.copytree(os.path.join(original_dir, "template"), tmp_path / "template")
+
+        os.chdir(tmp_path)
+
+        # Run plumber with both files present
+        run_plumber(
+            app_name=test_app_name,
+            repo_url="https://github.com/test/repo",
+            app_configmap_name="precedence-app-caddy",
+            proxy_configmap_name="precedence-proxy-caddy",
+            fec_config_path=str(fec_path),
+            frontend_yaml_path=str(yaml_path),
+        )
+
+        # Verify the generated ConfigMaps use frontend.yaml values (not fec.config.js)
+        proxy_path = tmp_path / "precedence-proxy-caddy.yaml"
+
+        assert proxy_path.exists(), "Proxy ConfigMap should be generated"
+
+        # Parse and verify proxy ConfigMap contains routes from frontend.yaml
+        proxy_configmap = yaml.safe_load(proxy_path.read_text())
+        proxy_data = proxy_configmap["data"]["routes"]
+
+        # Should contain yaml paths
+        assert "handle /yaml-path-1*" in proxy_data
+        assert "handle /yaml-path-2*" in proxy_data
+
+        # Should NOT contain fec.config.js paths
+        assert "/fec-path-1" not in proxy_data
+        assert "/fec-path-2" not in proxy_data
+
+    finally:
+        # Restore original directory
+        os.chdir(original_dir)
