@@ -1,6 +1,5 @@
 import json
 import os
-import yaml
 
 import yaml
 
@@ -79,6 +78,10 @@ def get_app_url_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> l
     This extracts paths from:
     - spec.frontend.paths[]
     - spec.module.modules[].routes[].pathname
+    - spec.searchEntries[].href
+    - spec.serviceTiles[].href
+    - spec.bundleSegments[].navItems[].href
+    - spec.bundleSegments[].navItems[].routes[].href
 
     Args:
         yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
@@ -124,6 +127,30 @@ def get_app_url_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> l
                                 if pathname:
                                     paths.append(pathname)
 
+                # Extract from spec.searchEntries[].href
+                search_entries = spec.get("searchEntries", [])
+                if isinstance(search_entries, list):
+                    for entry in search_entries:
+                        href = entry.get("href")
+                        if href:
+                            paths.append(href)
+
+                # Extract from spec.serviceTiles[].href
+                service_tiles = spec.get("serviceTiles", [])
+                if isinstance(service_tiles, list):
+                    for tile in service_tiles:
+                        href = tile.get("href")
+                        if href:
+                            paths.append(href)
+
+                # Extract from spec.bundleSegments[].navItems[]
+                bundle_segments = spec.get("bundleSegments", [])
+                if isinstance(bundle_segments, list):
+                    for segment in bundle_segments:
+                        nav_items = segment.get("navItems", [])
+                        if isinstance(nav_items, list):
+                            paths.extend(_extract_nav_item_hrefs(nav_items))
+
     # Return unique paths, preserving order
     seen = set()
     unique_paths = []
@@ -133,3 +160,37 @@ def get_app_url_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> l
             unique_paths.append(path)
 
     return unique_paths if unique_paths else None
+
+
+def _extract_nav_item_hrefs(nav_items: list) -> list[str]:
+    """
+    Recursively extract href values from navigation items.
+
+    Extracts from:
+    - navItems[].href (direct href on nav item)
+    - navItems[].routes[].href (nested routes within nav items)
+
+    Args:
+        nav_items: List of navigation items to process
+
+    Returns:
+        List of href values found
+    """
+    hrefs = []
+
+    for item in nav_items:
+        if not isinstance(item, dict):
+            continue
+
+        # Extract direct href from nav item
+        if "href" in item:
+            hrefs.append(item["href"])
+
+        # Extract hrefs from nested routes
+        routes = item.get("routes", [])
+        if isinstance(routes, list):
+            for route in routes:
+                if isinstance(route, dict) and "href" in route:
+                    hrefs.append(route["href"])
+
+    return hrefs

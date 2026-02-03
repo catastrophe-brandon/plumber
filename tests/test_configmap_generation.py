@@ -468,3 +468,138 @@ objects:
     finally:
         # Restore original directory
         os.chdir(original_dir)
+
+
+def test_frontend_yaml_extracts_navigation_routes(tmp_path):
+    """Test navigation routes from frontend.yaml are extracted and included in Caddy configs."""
+    import shutil
+
+    test_app_name = "rbac"
+
+    # Create a frontend.yaml with navigation routes similar to insights-rbac-ui
+    frontend_yaml_content = """apiVersion: v1
+kind: Template
+metadata:
+  name: rbac-frontend
+objects:
+  - apiVersion: cloud.redhat.com/v1alpha1
+    kind: Frontend
+    metadata:
+      name: rbac
+    spec:
+      frontend:
+        paths:
+          - /apps/rbac
+      searchEntries:
+        - id: rbac-org-admin
+          title: Org Admins
+          href: /iam/user-access/users
+          description: Test search entry
+      serviceTiles:
+        - id: users
+          href: /iam/user-access/users
+          title: Users
+        - id: groups
+          href: /iam/user-access/groups
+          title: Groups
+      bundleSegments:
+        - segmentId: module-rbac-ui
+          bundleId: iam
+          navItems:
+            - id: overview
+              title: Overview
+              href: /iam/user-access/overview
+            - id: my-access
+              title: My Access
+              href: /iam/my-user-access
+            - id: access-management
+              title: Access Management
+              expandable: true
+              routes:
+                - id: users-and-groups
+                  title: Users and Groups
+                  href: /iam/access-management/users-and-user-groups
+                - id: roles
+                  title: Roles
+                  href: /iam/access-management/roles
+      module:
+        modules:
+          - id: settings-user-access
+            module: ./SettingsUserAccess
+            routes:
+              - pathname: /settings/rbac
+          - id: iam-user-access
+            module: ./Iam
+            routes:
+              - pathname: /iam
+"""
+
+    # Create temporary frontend.yaml
+    yaml_path = tmp_path / "frontend.yaml"
+    yaml_path.write_text(frontend_yaml_content)
+
+    # Import the extraction function
+    from extraction import get_app_url_from_frontend_yaml
+
+    # Extract paths
+    paths = get_app_url_from_frontend_yaml(str(yaml_path))
+
+    # Verify all expected paths are extracted
+    assert paths is not None, "Should extract paths from frontend.yaml"
+    assert "/apps/rbac" in paths, "Should extract from spec.frontend.paths"
+    assert "/settings/rbac" in paths, "Should extract from spec.module.modules[].routes[].pathname"
+    assert "/iam" in paths, "Should extract from spec.module.modules[].routes[].pathname"
+    assert "/iam/user-access/users" in paths, "Should extract from searchEntries[].href"
+    assert "/iam/user-access/groups" in paths, "Should extract from serviceTiles[].href"
+    assert "/iam/user-access/overview" in paths, (
+        "Should extract from bundleSegments[].navItems[].href"
+    )
+    assert "/iam/my-user-access" in paths, "Should extract from bundleSegments[].navItems[].href"
+    assert "/iam/access-management/users-and-user-groups" in paths, (
+        "Should extract from bundleSegments[].navItems[].routes[].href"
+    )
+    assert "/iam/access-management/roles" in paths, (
+        "Should extract from bundleSegments[].navItems[].routes[].href"
+    )
+
+    # Verify the paths are unique
+    assert len(paths) == len(set(paths)), "Paths should be unique"
+
+    # Now verify these paths make it into the generated ConfigMaps
+    original_dir = os.getcwd()
+    try:
+        # Copy template directory to tmp_path so templates can be found
+        shutil.copytree(os.path.join(original_dir, "template"), tmp_path / "template")
+
+        os.chdir(tmp_path)
+
+        from main import run_plumber
+
+        # Generate ConfigMaps
+        run_plumber(
+            app_name=test_app_name,
+            repo_url="https://github.com/test/repo",
+            app_configmap_name="rbac-app-caddy",
+            proxy_configmap_name="rbac-proxy-caddy",
+            fec_config_path="nonexistent.js",
+            frontend_yaml_path=str(yaml_path),
+        )
+
+        # Verify proxy ConfigMap includes navigation routes
+        proxy_path = tmp_path / "rbac-proxy-caddy.yaml"
+        assert proxy_path.exists(), "Proxy ConfigMap should be generated"
+
+        proxy_configmap = yaml.safe_load(proxy_path.read_text())
+        proxy_data = proxy_configmap["data"]["routes"]
+
+        # Verify navigation routes are in the proxy config
+        assert "handle /iam/user-access/users*" in proxy_data
+        assert "handle /iam/user-access/groups*" in proxy_data
+        assert "handle /iam/user-access/overview*" in proxy_data
+        assert "handle /iam/my-user-access*" in proxy_data
+        assert "handle /iam/access-management/users-and-user-groups*" in proxy_data
+        assert "handle /iam/access-management/roles*" in proxy_data
+
+    finally:
+        # Restore original directory
+        os.chdir(original_dir)
