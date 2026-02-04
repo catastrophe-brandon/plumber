@@ -19,7 +19,9 @@
   	}
   	handle @app_match {
   		uri strip_prefix /apps/{{ app_name }}
+  		{%- if not is_federated_module %}
   		try_files {path} /index.html
+  		{%- endif %}
   		file_server * {
   			root /srv/dist
   			browse
@@ -33,7 +35,9 @@
 
     handle @env_match {
         uri strip_prefix /default
+        {%- if not is_federated_module %}
         try_files {path} /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
             browse
@@ -46,7 +50,9 @@
   }
   handle @{{ app_name }}_match {
       uri strip_prefix /{{ app_name }}
+      {%- if not is_federated_module %}
       rewrite / /index.html
+      {%- endif %}
       file_server * {
           root /srv/dist
       }
@@ -57,7 +63,9 @@
   }
   handle @{{ app_name }}_subpath {
       uri strip_prefix /{{ app_name }}
+      {%- if not is_federated_module %}
       try_files {path} /index.html
+      {%- endif %}
       file_server * {
           root /srv/dist
       }
@@ -71,7 +79,9 @@
     }
     handle @{{ route_name }}_match {
         uri strip_prefix {{ app_url }}
+        {%- if not is_federated_module %}
         rewrite / /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
         }
@@ -82,7 +92,9 @@
     }
     handle @{{ route_name }}_subpath {
         uri strip_prefix {{ app_url }}
+        {%- if not is_federated_module %}
         try_files {path} /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
         }

@@ -1,0 +1,380 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: insights-rbac-ui-app-caddy-config
+  namespace: rh-platform-experien-tenant
+data:
+  Caddyfile: |
+    # Caddyfile config for the application undergoing testing (This is NOT JSON)
+    {
+      	auto_https disable_redirects
+      	servers {
+      		metrics
+      	}
+      }
+
+      :9000 {
+      	metrics /metrics
+      }
+
+      :8000 {
+      	log
+
+      	# Handle main app route
+      	@app_match {
+      		path /apps/rbac*
+      	}
+      	handle @app_match {
+      		uri strip_prefix /apps/rbac
+      		file_server * {
+      			root /srv/dist
+      			browse
+      		}
+      	}
+
+        # Handle env based main route
+        @env_match {
+            path /default*
+        }
+
+        handle @env_match {
+            uri strip_prefix /default
+            file_server * {
+                root /srv/dist
+                browse
+            }
+        }
+
+      # Basic handling for application name without any prefixes in path
+      @rbac_match {
+          path /rbac/rbac/
+      }
+      handle @rbac_match {
+          uri strip_prefix /rbac
+          file_server * {
+              root /srv/dist
+          }
+      }
+
+      @rbac_subpath {
+          path /rbac/*
+      }
+      handle @rbac_subpath {
+          uri strip_prefix /rbac
+          file_server * {
+              root /srv/dist
+          }
+      }
+
+      # Beginning of dynamically-generated rbac routes from appUrl
+        @apps_rbac_match {
+          path /apps/rbac /apps/rbac/
+        }
+        handle @apps_rbac_match {
+            uri strip_prefix /apps/rbac
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @apps_rbac_subpath {
+            path /apps/rbac/*
+        }
+        handle @apps_rbac_subpath {
+            uri strip_prefix /apps/rbac
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @settings_rbac_match {
+          path /settings/rbac /settings/rbac/
+        }
+        handle @settings_rbac_match {
+            uri strip_prefix /settings/rbac
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @settings_rbac_subpath {
+            path /settings/rbac/*
+        }
+        handle @settings_rbac_subpath {
+            uri strip_prefix /settings/rbac
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_match {
+          path /iam /iam/
+        }
+        handle @iam_match {
+            uri strip_prefix /iam
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_subpath {
+            path /iam/*
+        }
+        handle @iam_subpath {
+            uri strip_prefix /iam
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_user-access_users_match {
+          path /iam/user-access/users /iam/user-access/users/
+        }
+        handle @iam_user-access_users_match {
+            uri strip_prefix /iam/user-access/users
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_user-access_users_subpath {
+            path /iam/user-access/users/*
+        }
+        handle @iam_user-access_users_subpath {
+            uri strip_prefix /iam/user-access/users
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_user-access_groups_match {
+          path /iam/user-access/groups /iam/user-access/groups/
+        }
+        handle @iam_user-access_groups_match {
+            uri strip_prefix /iam/user-access/groups
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_user-access_groups_subpath {
+            path /iam/user-access/groups/*
+        }
+        handle @iam_user-access_groups_subpath {
+            uri strip_prefix /iam/user-access/groups
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_user-access_workspaces_match {
+          path /iam/user-access/workspaces /iam/user-access/workspaces/
+        }
+        handle @iam_user-access_workspaces_match {
+            uri strip_prefix /iam/user-access/workspaces
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_user-access_workspaces_subpath {
+            path /iam/user-access/workspaces/*
+        }
+        handle @iam_user-access_workspaces_subpath {
+            uri strip_prefix /iam/user-access/workspaces
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_user-access_overview_match {
+          path /iam/user-access/overview /iam/user-access/overview/
+        }
+        handle @iam_user-access_overview_match {
+            uri strip_prefix /iam/user-access/overview
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_user-access_overview_subpath {
+            path /iam/user-access/overview/*
+        }
+        handle @iam_user-access_overview_subpath {
+            uri strip_prefix /iam/user-access/overview
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_my-user-access_match {
+          path /iam/my-user-access /iam/my-user-access/
+        }
+        handle @iam_my-user-access_match {
+            uri strip_prefix /iam/my-user-access
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_my-user-access_subpath {
+            path /iam/my-user-access/*
+        }
+        handle @iam_my-user-access_subpath {
+            uri strip_prefix /iam/my-user-access
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_access-management_users-and-user-groups_match {
+          path /iam/access-management/users-and-user-groups /iam/access-management/users-and-user-groups/
+        }
+        handle @iam_access-management_users-and-user-groups_match {
+            uri strip_prefix /iam/access-management/users-and-user-groups
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_access-management_users-and-user-groups_subpath {
+            path /iam/access-management/users-and-user-groups/*
+        }
+        handle @iam_access-management_users-and-user-groups_subpath {
+            uri strip_prefix /iam/access-management/users-and-user-groups
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_access-management_roles_match {
+          path /iam/access-management/roles /iam/access-management/roles/
+        }
+        handle @iam_access-management_roles_match {
+            uri strip_prefix /iam/access-management/roles
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_access-management_roles_subpath {
+            path /iam/access-management/roles/*
+        }
+        handle @iam_access-management_roles_subpath {
+            uri strip_prefix /iam/access-management/roles
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_access-management_workspaces_match {
+          path /iam/access-management/workspaces /iam/access-management/workspaces/
+        }
+        handle @iam_access-management_workspaces_match {
+            uri strip_prefix /iam/access-management/workspaces
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_access-management_workspaces_subpath {
+            path /iam/access-management/workspaces/*
+        }
+        handle @iam_access-management_workspaces_subpath {
+            uri strip_prefix /iam/access-management/workspaces
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_organization-management_organization-wide-access_match {
+          path /iam/organization-management/organization-wide-access /iam/organization-management/organization-wide-access/
+        }
+        handle @iam_organization-management_organization-wide-access_match {
+            uri strip_prefix /iam/organization-management/organization-wide-access
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_organization-management_organization-wide-access_subpath {
+            path /iam/organization-management/organization-wide-access/*
+        }
+        handle @iam_organization-management_organization-wide-access_subpath {
+            uri strip_prefix /iam/organization-management/organization-wide-access
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_organization-management_trusted-organizations_match {
+          path /iam/organization-management/trusted-organizations /iam/organization-management/trusted-organizations/
+        }
+        handle @iam_organization-management_trusted-organizations_match {
+            uri strip_prefix /iam/organization-management/trusted-organizations
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_organization-management_trusted-organizations_subpath {
+            path /iam/organization-management/trusted-organizations/*
+        }
+        handle @iam_organization-management_trusted-organizations_subpath {
+            uri strip_prefix /iam/organization-management/trusted-organizations
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_organization-management_authentication-factors_match {
+          path /iam/organization-management/authentication-factors /iam/organization-management/authentication-factors/
+        }
+        handle @iam_organization-management_authentication-factors_match {
+            uri strip_prefix /iam/organization-management/authentication-factors
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_organization-management_authentication-factors_subpath {
+            path /iam/organization-management/authentication-factors/*
+        }
+        handle @iam_organization-management_authentication-factors_subpath {
+            uri strip_prefix /iam/organization-management/authentication-factors
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_organization-management_identity-provider-integration_match {
+          path /iam/organization-management/identity-provider-integration /iam/organization-management/identity-provider-integration/
+        }
+        handle @iam_organization-management_identity-provider-integration_match {
+            uri strip_prefix /iam/organization-management/identity-provider-integration
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_organization-management_identity-provider-integration_subpath {
+            path /iam/organization-management/identity-provider-integration/*
+        }
+        handle @iam_organization-management_identity-provider-integration_subpath {
+            uri strip_prefix /iam/organization-management/identity-provider-integration
+            file_server * {
+                root /srv/dist
+            }
+        }
+        @iam_user-access_roles_match {
+          path /iam/user-access/roles /iam/user-access/roles/
+        }
+        handle @iam_user-access_roles_match {
+            uri strip_prefix /iam/user-access/roles
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+        @iam_user-access_roles_subpath {
+            path /iam/user-access/roles/*
+        }
+        handle @iam_user-access_roles_subpath {
+            uri strip_prefix /iam/user-access/roles
+            file_server * {
+                root /srv/dist
+            }
+        }
+
+      # Handle the root path
+      handle / {
+        redir /apps/chrome/index.html permanent
+      }
+    }

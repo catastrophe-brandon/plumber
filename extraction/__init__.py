@@ -194,3 +194,44 @@ def _extract_nav_item_hrefs(nav_items: list) -> list[str]:
                     hrefs.append(route["href"])
 
     return hrefs
+
+
+def is_federated_module(yaml_path: str = "deploy/frontend.yaml") -> bool:
+    """
+    Detect if the application is a federated module.
+
+    A federated module is identified by the presence of spec.module.manifestLocation
+    in the frontend.yaml file. Federated modules are loaded dynamically by Chrome
+    and don't have their own index.html file.
+
+    Args:
+        yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
+
+    Returns:
+        True if the app is a federated module, False otherwise
+
+    Raises:
+        FileNotFoundError: If frontend.yaml is not found
+    """
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"frontend.yaml not found at: {yaml_path}")
+
+    # Read and parse the YAML file
+    with open(yaml_path) as f:
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML file: {e}")
+
+    # Navigate to the Frontend spec
+    if "objects" in data and isinstance(data["objects"], list):
+        for obj in data["objects"]:
+            if obj.get("kind") == "Frontend":
+                spec = obj.get("spec", {})
+
+                # Check if module.manifestLocation exists
+                module_config = spec.get("module", {})
+                if "manifestLocation" in module_config:
+                    return True
+
+    return False
