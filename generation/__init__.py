@@ -80,6 +80,7 @@ def generate_proxy_routes_caddyfile(
     app_name: str,
     app_port: str = "8000",
     chrome_port: str = "9912",
+    is_federated_module: bool = False,
     template_path: str = "template/proxy_caddy.template.j2",
 ) -> str:
     """
@@ -90,6 +91,7 @@ def generate_proxy_routes_caddyfile(
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
         chrome_port: Port for Chrome resources (default: "9912")
+        is_federated_module: Whether this is a federated module (default: False)
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 
     Returns:
@@ -107,6 +109,7 @@ def generate_proxy_routes_caddyfile(
         app_port=app_port,
         chrome_port=chrome_port,
         route_prefixes=app_url_value,
+        is_federated_module=is_federated_module,
     )
 
     return rendered
@@ -200,6 +203,7 @@ def generate_proxy_caddy_configmap(
     app_port: str = "8000",
     chrome_port: str = "9912",
     namespace: str | None = None,
+    is_federated_module: bool = False,
 ) -> str:
     """
     Generate proxy routes Caddyfile and wrap it in a ConfigMap YAML.
@@ -211,6 +215,7 @@ def generate_proxy_caddy_configmap(
         app_port: Port for the application (default: "8000")
         chrome_port: Port for Chrome resources (default: "9912")
         namespace: Optional namespace for the ConfigMap
+        is_federated_module: Whether this is a federated module (default: False)
 
     Returns:
         Path to the generated ConfigMap YAML file
@@ -221,6 +226,7 @@ def generate_proxy_caddy_configmap(
         app_name=app_name,
         app_port=app_port,
         chrome_port=chrome_port,
+        is_federated_module=is_federated_module,
     )
 
     # Wrap in ConfigMap with "routes" as the data key

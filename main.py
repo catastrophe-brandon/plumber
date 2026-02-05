@@ -1,7 +1,11 @@
 import argparse
 import json
 
-from extraction import get_app_url_from_fec_config, get_app_url_from_frontend_yaml, is_federated_module
+from extraction import (
+    get_app_url_from_fec_config,
+    get_app_url_from_frontend_yaml,
+    is_federated_module,
+)
 from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
 
 
@@ -54,10 +58,10 @@ def run_plumber(
     try:
         is_fed_module = is_federated_module(frontend_yaml_path)
         if is_fed_module:
-            print(f"Detected federated module (has manifestLocation in frontend.yaml)")
-            print(f"  → Will skip index.html fallback in Caddyfile")
+            print("Detected federated module (has manifestLocation in frontend.yaml)")
+            print("  → Will skip index.html fallback in Caddyfile")
     except (FileNotFoundError, ValueError):
-        print(f"Note: Could not detect federated module status, assuming standalone app")
+        print("Note: Could not detect federated module status, assuming standalone app")
 
     # Generate app Caddy ConfigMap
     app_configmap_path = generate_app_caddy_configmap(
@@ -78,6 +82,7 @@ def run_plumber(
         app_port=app_port,
         chrome_port=chrome_port,
         namespace=namespace,
+        is_federated_module=is_fed_module,
     )
     print(f"Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
 
