@@ -66,7 +66,6 @@ def test_generate_proxy_caddy_configmap():
         app_url_value=test_app_urls,
         app_name=test_app_name,
         app_port="8000",
-        chrome_port="9912",
     )
 
     try:
@@ -94,11 +93,8 @@ def test_generate_proxy_caddy_configmap():
         assert "routes" in data, "routes key not found in data"
 
         routes_content = data["routes"]
-        assert "@root path /" in routes_content
-        assert "handle /apps/chrome*" in routes_content
         assert f"handle /apps/{test_app_name}*" in routes_content
         assert "handle /settings/test-app*" in routes_content
-        assert "reverse_proxy 127.0.0.1:9912" in routes_content
         assert "reverse_proxy 127.0.0.1:8000" in routes_content
 
     finally:

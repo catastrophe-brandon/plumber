@@ -1,11 +1,7 @@
 import argparse
 import json
 
-from extraction import (
-    get_app_url_from_fec_config,
-    get_app_url_from_frontend_yaml,
-    is_federated_module,
-)
+from extraction import get_app_url_from_fec_config, get_app_url_from_frontend_yaml
 from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
 
 
@@ -26,9 +22,8 @@ def run_plumber(
     if namespace:
         print(f"Namespace: {namespace}")
 
-    # Default ports
+    # Default port
     app_port = "8000"
-    chrome_port = "9912"
 
     # Try to get appUrl from frontend.yaml first (for older repos)
     app_url_value = None
@@ -53,16 +48,6 @@ def run_plumber(
         app_url_value = [f"/{app_name}"]
         print(f"Using default routes: {app_url_value}")
 
-    # Detect if this is a federated module
-    is_fed_module = False
-    try:
-        is_fed_module = is_federated_module(frontend_yaml_path)
-        if is_fed_module:
-            print("Detected federated module (has manifestLocation in frontend.yaml)")
-            print("  → Will skip index.html fallback in Caddyfile")
-    except (FileNotFoundError, ValueError):
-        print("Note: Could not detect federated module status, assuming standalone app")
-
     # Generate app Caddy ConfigMap
     app_configmap_path = generate_app_caddy_configmap(
         configmap_name=app_configmap_name,
@@ -70,7 +55,6 @@ def run_plumber(
         app_name=app_name,
         app_port=app_port,
         namespace=namespace,
-        is_federated_module=is_fed_module,
     )
     print(f"\nGenerated app Caddy ConfigMap: {app_configmap_path}")
 
@@ -80,9 +64,7 @@ def run_plumber(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
-        chrome_port=chrome_port,
         namespace=namespace,
-        is_federated_module=is_fed_module,
     )
     print(f"Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
 

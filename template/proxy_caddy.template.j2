@@ -1,31 +1,3 @@
-@root path /
-handle @root {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
-handle /index.html {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
-handle /apps/chrome* {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
-{%- if is_federated_module %}
-# Federated module: Only /apps/{{ app_name }}* goes to app port for assets
-# All other routes go to Chrome shell which loads the federated module
-handle /apps/{{ app_name }}* {
-    reverse_proxy 127.0.0.1:{{ app_port }}
-}
-{% for route_path in route_prefixes %}
-{%- if not route_path.startswith('/apps/' + app_name) %}
-handle {{ route_path }}* {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-{%- endif %}
-{%- endfor %}
-{%- else %}
-# Standalone app: All app routes go to app port
 handle /apps/{{ app_name }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
@@ -34,4 +6,3 @@ handle {{ route_path }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
 {%- endfor %}
-{%- endif %}
