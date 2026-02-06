@@ -30,8 +30,12 @@ Plumber automates the process of generating Kubernetes ConfigMap YAML files cont
 
 ### Configuration Extraction
 - **Frontend YAML Support**: Parse `frontend.yaml` (or `frontend.yml`) to extract paths from:
-  - `spec.frontend.paths[]`
-  - `spec.module.modules[].routes[].pathname`
+  - `spec.frontend.paths[]` - Basic application paths
+  - `spec.module.modules[].routes[].pathname` - Module route definitions
+  - `spec.searchEntries[].href` - Search entry navigation routes
+  - `spec.serviceTiles[].href` - Service tile navigation routes
+  - `spec.bundleSegments[].navItems[].href` - Direct navigation item links
+  - `spec.bundleSegments[].navItems[].routes[].href` - Nested navigation routes (e.g., `/iam/user-access/users`)
 - **FEC Config Support**: Parse JavaScript `fec.config.js` files to extract application URLs
   - Supports both string and array formats: `appUrl: '/path'` or `appUrl: ['/path1', '/path2']`
   - Handles both single and double quotes
@@ -139,7 +143,8 @@ app_urls = get_app_url_from_frontend_yaml()
 
 # Or specify a custom path
 app_urls = get_app_url_from_frontend_yaml("path/to/deploy/frontend.yaml")
-# Returns: ['/apps/my-app', '/staging/my-app', ...]
+# Returns: ['/apps/my-app', '/iam/user-access/users', '/iam/user-access/groups', ...]
+# Extracts from all navigation structures including nested routes
 ```
 
 #### Extract appUrl from fec.config.js

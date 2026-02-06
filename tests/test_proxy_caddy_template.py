@@ -14,7 +14,6 @@ def test_proxy_caddy_template_rendering():
     test_vars = {
         "app_name": "test-application",
         "app_port": "8000",
-        "chrome_port": "9912",
         "route_prefixes": [
             "/settings/test-application",
             "/openshift/test-application",
@@ -35,24 +34,17 @@ def test_proxy_caddy_template_rendering():
     # Verify the app_name was substituted
     assert "test-application" in rendered, "app_name not found in rendered output"
 
-    # Verify ports were substituted
-    assert "9912" in rendered, "chrome_port not found in rendered output"
+    # Verify port was substituted
     assert "8000" in rendered, "app_port not found in rendered output"
 
     # Verify specific routes are present
     assert "handle /apps/test-application*" in rendered, "App-specific route not found"
     assert "reverse_proxy 127.0.0.1:8000" in rendered, "App port proxy not found"
-    assert "reverse_proxy 127.0.0.1:9912" in rendered, "Chrome port proxy not found"
 
     # Verify all routes from route_prefixes were rendered
     for route_path in test_vars["route_prefixes"]:
         expected_route = f"handle {route_path}*"
         assert expected_route in rendered, f"Route path '{route_path}' not found in output"
-
-    # Verify root and index.html routes
-    assert "@root path /" in rendered
-    assert "handle /index.html" in rendered
-    assert "handle /apps/chrome*" in rendered
 
     print("Rendered Caddyfile:")
     print(rendered)
@@ -68,7 +60,6 @@ def test_proxy_caddy_template_with_different_app():
     test_vars = {
         "app_name": "my-custom-app",
         "app_port": "3000",
-        "chrome_port": "4000",
         "route_prefixes": ["/settings/my-custom-app", "/insights/my-custom-app"],
     }
 
@@ -78,9 +69,8 @@ def test_proxy_caddy_template_with_different_app():
     assert "my-custom-app" in rendered
     assert "test-application" not in rendered
 
-    # Verify the new ports
+    # Verify the new port
     assert "3000" in rendered
-    assert "4000" in rendered
 
     # Verify only the specified route paths are present
     assert "handle /settings/my-custom-app*" in rendered
@@ -100,7 +90,6 @@ def test_proxy_caddy_template_route_count():
     test_vars = {
         "app_name": "test-app",
         "app_port": "8000",
-        "chrome_port": "9912",
         "route_prefixes": ["/settings", "/openshift", "/ansible"],
     }
 
@@ -110,13 +99,10 @@ def test_proxy_caddy_template_route_count():
     handle_count = rendered.count("handle ")
 
     # Expected handles:
-    # 1. @root
-    # 2. /index.html
-    # 3. /apps/chrome*
-    # 4. /apps/{app_name}*
-    # 5-7. route_paths (3 paths)
-    # Total: 7 handles
-    expected_count = 7
+    # 1. /apps/{app_name}*
+    # 2-4. route_paths (3 paths)
+    # Total: 4 handles
+    expected_count = 4
     assert handle_count == expected_count, (
         f"Expected {expected_count} handle directives, found {handle_count}"
     )
