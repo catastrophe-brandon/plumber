@@ -22,9 +22,8 @@ def run_plumber(
     if namespace:
         print(f"Namespace: {namespace}")
 
-    # Default ports
+    # Default port
     app_port = "8000"
-    chrome_port = "9912"
 
     # Try to get appUrl from frontend.yaml first (for older repos)
     app_url_value = None
@@ -65,7 +64,6 @@ def run_plumber(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
-        chrome_port=chrome_port,
         namespace=namespace,
     )
     print(f"Generated proxy Caddy ConfigMap: {proxy_configmap_path}")

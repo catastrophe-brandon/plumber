@@ -76,7 +76,6 @@ def generate_proxy_routes_caddyfile(
     app_url_value: list[str],
     app_name: str,
     app_port: str = "8000",
-    chrome_port: str = "9912",
     template_path: str = "template/proxy_caddy.template.j2",
 ) -> str:
     """
@@ -86,7 +85,6 @@ def generate_proxy_routes_caddyfile(
         app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
-        chrome_port: Port for Chrome resources (default: "9912")
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 
     Returns:
@@ -102,7 +100,6 @@ def generate_proxy_routes_caddyfile(
     rendered = template.render(
         app_name=app_name,
         app_port=app_port,
-        chrome_port=chrome_port,
         route_prefixes=app_url_value,
     )
 
@@ -192,7 +189,6 @@ def generate_proxy_caddy_configmap(
     app_url_value: list[str],
     app_name: str,
     app_port: str = "8000",
-    chrome_port: str = "9912",
     namespace: str | None = None,
 ) -> str:
     """
@@ -203,7 +199,6 @@ def generate_proxy_caddy_configmap(
         app_url_value: List of URL paths from appUrl
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
-        chrome_port: Port for Chrome resources (default: "9912")
         namespace: Optional namespace for the ConfigMap
 
     Returns:
@@ -214,7 +209,6 @@ def generate_proxy_caddy_configmap(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
-        chrome_port=chrome_port,
     )
 
     # Wrap in ConfigMap with "routes" as the data key

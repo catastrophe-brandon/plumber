@@ -19,6 +19,7 @@
   	}
   	handle @app_match {
   		uri strip_prefix /apps/{{ app_name }}
+  		try_files {path} /index.html
   		file_server * {
   			root /srv/dist
   			browse
@@ -32,6 +33,7 @@
 
     handle @env_match {
         uri strip_prefix /default
+        try_files {path} /index.html
         file_server * {
             root /srv/dist
             browse
@@ -55,6 +57,7 @@
   }
   handle @{{ app_name }}_subpath {
       uri strip_prefix /{{ app_name }}
+      try_files {path} /index.html
       file_server * {
           root /srv/dist
       }
@@ -79,6 +82,7 @@
     }
     handle @{{ route_name }}_subpath {
         uri strip_prefix {{ app_url }}
+        try_files {path} /index.html
         file_server * {
             root /srv/dist
         }

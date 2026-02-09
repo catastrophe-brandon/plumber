@@ -20,11 +20,6 @@ def test_generate_proxy_routes_caddyfile():
     # Verify the result is a string
     assert isinstance(result, str)
 
-    # Verify basic structure
-    assert "@root path /" in result
-    assert "handle /index.html" in result
-    assert "handle /apps/chrome*" in result
-
     # Verify app-specific route
     assert "handle /apps/learning-resources*" in result
     assert "reverse_proxy 127.0.0.1:8000" in result
@@ -33,25 +28,20 @@ def test_generate_proxy_routes_caddyfile():
     for route in app_url_value:
         assert f"handle {route}*" in result
 
-    # Verify chrome port is used
-    assert "reverse_proxy 127.0.0.1:9912" in result
-
     print("Generated Caddyfile:")
     print(result)
 
 
 def test_generate_proxy_routes_caddyfile_custom_ports():
-    """Test with custom ports."""
+    """Test with custom app port."""
     app_url_value = ["/my-app"]
 
     result = generate_proxy_routes_caddyfile(
         app_url_value=app_url_value,
         app_name="my-app",
         app_port="3000",
-        chrome_port="4000",
     )
 
-    # Verify custom ports are used
+    # Verify custom port is used
     assert "reverse_proxy 127.0.0.1:3000" in result
-    assert "reverse_proxy 127.0.0.1:4000" in result
     assert "handle /my-app*" in result

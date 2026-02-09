@@ -1,16 +1,3 @@
-@root path /
-handle @root {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
-handle /index.html {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
-handle /apps/chrome* {
-    reverse_proxy 127.0.0.1:{{ chrome_port }}
-}
-
 handle /apps/{{ app_name }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
@@ -18,4 +5,4 @@ handle /apps/{{ app_name }}* {
 handle {{ route_path }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
-{% endfor %}
+{%- endfor %}
