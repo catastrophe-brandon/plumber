@@ -81,9 +81,12 @@ graph TD
 ## Template Variables
 
 The `app_caddy.template.j2` template receives:
-- `app_name`: Module name (from spec.frontend.name or CLI)
+- `app_name`: Module name (from metadata.name in frontend.yaml or CLI fallback)
 - `app_urls`: List of routes (from spec.frontend.paths + module routes)
 - `is_federated`: Boolean flag indicating federated module
+
+Note: app_name is primarily used for the /default* route and ConfigMap naming. All actual
+application routes come from app_urls (extracted from frontend.yaml), not hardcoded app_name patterns.
 
 ## Common Issues
 

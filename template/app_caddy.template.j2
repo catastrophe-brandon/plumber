@@ -29,34 +29,7 @@
         }
     }
 
-  # Basic handling for application name without any prefixes in path
-  @{{ app_name }}_match {
-      path /{{ app_name }}/{{ app_name }}/
-  }
-  handle @{{ app_name }}_match {
-      uri strip_prefix /{{ app_name }}
-      {%- if not is_federated %}
-      rewrite / /index.html
-      {%- endif %}
-      file_server * {
-          root /srv/dist
-      }
-  }
-
-  @{{ app_name }}_subpath {
-      path /{{ app_name }}/*
-  }
-  handle @{{ app_name }}_subpath {
-      uri strip_prefix /{{ app_name }}
-      {%- if not is_federated %}
-      try_files {path} /index.html
-      {%- endif %}
-      file_server * {
-          root /srv/dist
-      }
-  }
-
-  # Beginning of dynamically-generated {{ app_name }} routes from appUrl
+  # Dynamically-generated routes from frontend.yaml paths
   {%- for app_url in app_urls %}
     {%- set route_name = app_url.strip('/').replace('/', '_') %}
     @{{ route_name }}_match {
