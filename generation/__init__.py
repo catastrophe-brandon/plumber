@@ -40,6 +40,7 @@ def generate_app_caddyfile(
     app_url_value: list[str],
     app_name: str,
     app_port: str = "8000",
+    is_federated: bool = False,
     template_path: str = "template/app_caddy.template.j2",
 ) -> str:
     """
@@ -52,6 +53,7 @@ def generate_app_caddyfile(
         app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
+        is_federated: Whether this is a federated module (default: False)
         template_path: Path to the Jinja2 template (default: "template/app_caddy.template.j2")
 
     Returns:
@@ -67,6 +69,7 @@ def generate_app_caddyfile(
     rendered = template.render(
         app_name=app_name,
         app_urls=app_url_value,
+        is_federated=is_federated,
     )
 
     return rendered
@@ -147,6 +150,7 @@ def generate_app_caddy_configmap(
     app_name: str,
     app_port: str = "8000",
     namespace: str | None = None,
+    is_federated: bool = False,
 ) -> str:
     """
     Generate app Caddyfile and wrap it in a ConfigMap YAML.
@@ -157,6 +161,7 @@ def generate_app_caddy_configmap(
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
         namespace: Optional namespace for the ConfigMap
+        is_federated: Whether this is a federated module (default: False)
 
     Returns:
         Path to the generated ConfigMap YAML file
@@ -166,6 +171,7 @@ def generate_app_caddy_configmap(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
+        is_federated=is_federated,
     )
 
     # Wrap in ConfigMap
