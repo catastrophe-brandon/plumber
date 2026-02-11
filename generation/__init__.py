@@ -36,10 +36,33 @@ def validate_yaml_file(file_path: str) -> None:
         print("   Install with: pip install yamllint", file=sys.stderr)
 
 
+def validate_federated_module_config(caddyfile_content: str, is_federated: bool) -> None:
+    """
+    Validate that federated module configurations don't contain try_files directives.
+
+    Federated modules should NOT have try_files directives because they don't have
+    index.html files - only fed-mods.json and JavaScript bundles.
+
+    Args:
+        caddyfile_content: The generated Caddyfile configuration
+        is_federated: Whether this is a federated module
+
+    Raises:
+        ValueError: If a federated module config contains try_files
+    """
+    if is_federated and "try_files" in caddyfile_content:
+        raise ValueError(
+            "❌ Validation failed: Federated module configuration contains 'try_files' directive.\n"
+            "   Federated modules do not have index.html and should not use try_files.\n"
+            "   This indicates a bug in the template generation logic."
+        )
+
+
 def generate_app_caddyfile(
     app_url_value: list[str],
     app_name: str,
     app_port: str = "8000",
+    is_federated: bool = False,
     template_path: str = "template/app_caddy.template.j2",
 ) -> str:
     """
@@ -52,6 +75,7 @@ def generate_app_caddyfile(
         app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
+        is_federated: Whether this is a federated module (default: False)
         template_path: Path to the Jinja2 template (default: "template/app_caddy.template.j2")
 
     Returns:
@@ -67,7 +91,11 @@ def generate_app_caddyfile(
     rendered = template.render(
         app_name=app_name,
         app_urls=app_url_value,
+        is_federated=is_federated,
     )
+
+    # Validate that federated modules don't have try_files directives
+    validate_federated_module_config(rendered, is_federated)
 
     return rendered
 
@@ -147,6 +175,7 @@ def generate_app_caddy_configmap(
     app_name: str,
     app_port: str = "8000",
     namespace: str | None = None,
+    is_federated: bool = False,
 ) -> str:
     """
     Generate app Caddyfile and wrap it in a ConfigMap YAML.
@@ -157,6 +186,7 @@ def generate_app_caddy_configmap(
         app_name: Name of the application
         app_port: Port for the application (default: "8000")
         namespace: Optional namespace for the ConfigMap
+        is_federated: Whether this is a federated module (default: False)
 
     Returns:
         Path to the generated ConfigMap YAML file
@@ -166,6 +196,7 @@ def generate_app_caddy_configmap(
         app_url_value=app_url_value,
         app_name=app_name,
         app_port=app_port,
+        is_federated=is_federated,
     )
 
     # Wrap in ConfigMap

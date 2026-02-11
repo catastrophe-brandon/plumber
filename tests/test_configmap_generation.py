@@ -1,9 +1,15 @@
 import os
 import tempfile
 
+import pytest
 import yaml
 
-from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
+from generation import (
+    generate_app_caddy_configmap,
+    generate_app_caddyfile,
+    generate_proxy_caddy_configmap,
+    validate_federated_module_config,
+)
 
 
 def test_generate_app_caddy_configmap():
@@ -599,3 +605,135 @@ objects:
     finally:
         # Restore original directory
         os.chdir(original_dir)
+
+
+def test_validate_federated_module_config_rejects_try_files():
+    """Test that validation raises an error if a federated module config contains try_files."""
+    caddyfile_with_try_files = """
+    :8000 {
+        handle /apps/my-app* {
+            try_files {path} /index.html
+            file_server * {
+                root /srv/dist
+            }
+        }
+    }
+    """
+
+    # Should raise ValueError for federated module with try_files
+    with pytest.raises(ValueError, match="Federated module configuration contains 'try_files'"):
+        validate_federated_module_config(caddyfile_with_try_files, is_federated=True)
+
+
+def test_validate_federated_module_config_allows_no_try_files():
+    """Test that validation passes if a federated module config has no try_files."""
+    caddyfile_without_try_files = """
+    :8000 {
+        handle /apps/my-app* {
+            file_server * {
+                root /srv/dist
+            }
+        }
+    }
+    """
+
+    # Should not raise any error
+    validate_federated_module_config(caddyfile_without_try_files, is_federated=True)
+
+
+def test_validate_standalone_app_allows_try_files():
+    """Test that validation passes for standalone apps with try_files."""
+    caddyfile_with_try_files = """
+    :8000 {
+        handle /apps/my-app* {
+            try_files {path} /index.html
+            file_server * {
+                root /srv/dist
+            }
+        }
+    }
+    """
+
+    # Should not raise any error for standalone apps
+    validate_federated_module_config(caddyfile_with_try_files, is_federated=False)
+
+
+def test_federated_module_generates_config_without_try_files():
+    """Test that federated modules generate Caddy config without try_files directives."""
+    test_app_name = "rbac"
+    test_app_urls = ["/apps/rbac", "/settings/rbac"]
+
+    # Generate Caddyfile for federated module
+    caddyfile = generate_app_caddyfile(
+        app_url_value=test_app_urls,
+        app_name=test_app_name,
+        is_federated=True,
+    )
+
+    # Verify no try_files directives in the output
+    assert "try_files" not in caddyfile, (
+        "Federated module config should not contain 'try_files' directives"
+    )
+
+    # Verify file_server is still present (we still serve static files)
+    assert "file_server" in caddyfile
+
+
+def test_standalone_app_generates_config_with_try_files():
+    """Test that standalone apps generate Caddy config with try_files directives."""
+    test_app_name = "my-standalone-app"
+    test_app_urls = ["/apps/my-standalone-app"]
+
+    # Generate Caddyfile for standalone app
+    caddyfile = generate_app_caddyfile(
+        app_url_value=test_app_urls,
+        app_name=test_app_name,
+        is_federated=False,
+    )
+
+    # Verify try_files directives ARE present for standalone apps
+    assert "try_files" in caddyfile, "Standalone app config should contain 'try_files' directives"
+
+    # Verify file_server is present
+    assert "file_server" in caddyfile
+
+
+def test_federated_module_configmap_has_no_try_files():
+    """Integration test: Verify federated module ConfigMap has no try_files."""
+    test_app_name = "rbac"
+    test_configmap_name = "rbac-federated-caddy"
+    test_app_urls = ["/apps/rbac", "/settings/rbac"]
+
+    # Generate the ConfigMap for a federated module
+    output_path = generate_app_caddy_configmap(
+        configmap_name=test_configmap_name,
+        app_url_value=test_app_urls,
+        app_name=test_app_name,
+        is_federated=True,
+    )
+
+    try:
+        # Verify the output file exists
+        assert os.path.exists(output_path), f"Output file not created at {output_path}"
+
+        # Read and parse the YAML
+        with open(output_path) as f:
+            configmap_content = f.read()
+
+        # Parse YAML
+        configmap = yaml.safe_load(configmap_content)
+        caddyfile_content = configmap["data"]["Caddyfile"]
+
+        # Verify no try_files in the generated config
+        assert "try_files" not in caddyfile_content, (
+            "Federated module ConfigMap should not contain 'try_files' directives"
+        )
+
+        # Verify routes are still present
+        assert "/apps/rbac" in caddyfile_content
+        assert "/settings/rbac" in caddyfile_content
+
+    finally:
+        # Clean up
+        if os.path.exists(output_path):
+            os.remove(output_path)

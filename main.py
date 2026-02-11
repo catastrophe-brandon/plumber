@@ -1,7 +1,12 @@
 import argparse
 import json
 
-from extraction import get_app_url_from_fec_config, get_app_url_from_frontend_yaml
+from extraction import (
+    get_app_url_from_fec_config,
+    get_app_url_from_frontend_yaml,
+    get_module_name_from_frontend_yaml,
+    is_federated_module,
+)
 from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
 
 
@@ -15,7 +20,7 @@ def run_plumber(
     namespace: str | None = None,
 ):
     print("Hello from plumber!")
-    print(f"App Name: {app_name}")
+    print(f"App Name (from CLI): {app_name}")
     print(f"Repo URL: {repo_url}")
     print(f"App ConfigMap Name: {app_configmap_name}")
     print(f"Proxy ConfigMap Name: {proxy_configmap_name}")
@@ -25,14 +30,43 @@ def run_plumber(
     # Default port
     app_port = "8000"
 
+    # Detect if this is a federated module
+    is_federated = False
+    try:
+        is_federated = is_federated_module(frontend_yaml_path)
+        if is_federated:
+            print("✓ Detected federated module (has spec.module.manifestLocation)")
+        else:
+            print("✓ Detected standalone app (no spec.module.manifestLocation)")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Note: Could not detect module type from {frontend_yaml_path}: {e}")
+
+    # Try to extract module name from frontend.yaml (overrides CLI app_name)
+    module_name = None
+    try:
+        module_name = get_module_name_from_frontend_yaml(frontend_yaml_path)
+        if module_name:
+            print(f"✓ Extracted module name from frontend.yaml: {module_name}")
+            if module_name != app_name:
+                print(f"  Note: Using '{module_name}' instead of CLI app_name '{app_name}'")
+            app_name = module_name  # Override CLI app_name with extracted module name
+        else:
+            print(
+                f"Note: No module name found in {frontend_yaml_path}, "
+                f"using CLI app_name: {app_name}"
+            )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Note: Could not extract module name from {frontend_yaml_path}: {e}")
+        print(f"      Using CLI app_name: {app_name}")
+
     # Try to get appUrl from frontend.yaml first (for older repos)
     app_url_value = None
     try:
         app_url_value = get_app_url_from_frontend_yaml(frontend_yaml_path)
         if app_url_value:
-            print(f"Found paths in {frontend_yaml_path}: {app_url_value}")
+            print(f"✓ Found paths in {frontend_yaml_path}: {app_url_value}")
     except (FileNotFoundError, ValueError):
-        print(f"Note: Could not read {frontend_yaml_path}, trying fec.config.js")
+        print(f"Note: Could not read paths from {frontend_yaml_path}, trying fec.config.js")
 
     # Fall back to fec.config.js if frontend.yaml didn't provide paths
     if not app_url_value:
@@ -55,8 +89,9 @@ def run_plumber(
         app_name=app_name,
         app_port=app_port,
         namespace=namespace,
+        is_federated=is_federated,
     )
-    print(f"\nGenerated app Caddy ConfigMap: {app_configmap_path}")
+    print(f"\n✓ Generated app Caddy ConfigMap: {app_configmap_path}")
 
     # Generate proxy Caddy ConfigMap
     proxy_configmap_path = generate_proxy_caddy_configmap(
@@ -66,7 +101,7 @@ def run_plumber(
         app_port=app_port,
         namespace=namespace,
     )
-    print(f"Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
+    print(f"✓ Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
 
 
 def main():

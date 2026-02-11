@@ -13,19 +13,6 @@
   :8000 {
   	log
 
-  	# Handle main app route
-  	@app_match {
-  		path /apps/{{ app_name }}*
-  	}
-  	handle @app_match {
-  		uri strip_prefix /apps/{{ app_name }}
-  		try_files {path} /index.html
-  		file_server * {
-  			root /srv/dist
-  			browse
-  		}
-  	}
-
     # Handle env based main route
     @env_match {
         path /default*
@@ -33,37 +20,16 @@
 
     handle @env_match {
         uri strip_prefix /default
+        {%- if not is_federated %}
         try_files {path} /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
             browse
         }
     }
 
-  # Basic handling for application name without any prefixes in path
-  @{{ app_name }}_match {
-      path /{{ app_name }}/{{ app_name }}/
-  }
-  handle @{{ app_name }}_match {
-      uri strip_prefix /{{ app_name }}
-      rewrite / /index.html
-      file_server * {
-          root /srv/dist
-      }
-  }
-
-  @{{ app_name }}_subpath {
-      path /{{ app_name }}/*
-  }
-  handle @{{ app_name }}_subpath {
-      uri strip_prefix /{{ app_name }}
-      try_files {path} /index.html
-      file_server * {
-          root /srv/dist
-      }
-  }
-
-  # Beginning of dynamically-generated {{ app_name }} routes from appUrl
+  # Dynamically-generated routes from frontend.yaml paths
   {%- for app_url in app_urls %}
     {%- set route_name = app_url.strip('/').replace('/', '_') %}
     @{{ route_name }}_match {
@@ -71,7 +37,9 @@
     }
     handle @{{ route_name }}_match {
         uri strip_prefix {{ app_url }}
+        {%- if not is_federated %}
         rewrite / /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
         }
@@ -82,7 +50,9 @@
     }
     handle @{{ route_name }}_subpath {
         uri strip_prefix {{ app_url }}
+        {%- if not is_federated %}
         try_files {path} /index.html
+        {%- endif %}
         file_server * {
             root /srv/dist
         }

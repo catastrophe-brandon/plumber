@@ -235,3 +235,43 @@ def is_federated_module(yaml_path: str = "deploy/frontend.yaml") -> bool:
                     return True
 
     return False
+
+
+def get_module_name_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> str | None:
+    """
+    Extract the module name from frontend.yaml file.
+
+    The module name is found at metadata.name in the Frontend object and represents
+    the actual module identifier (e.g., "rbac" rather than the repository name
+    "insights-rbac-ui").
+
+    Args:
+        yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
+
+    Returns:
+        Module name string, or None if not found
+
+    Raises:
+        FileNotFoundError: If frontend.yaml is not found
+    """
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"frontend.yaml not found at: {yaml_path}")
+
+    # Read and parse the YAML file
+    with open(yaml_path) as f:
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML file: {e}")
+
+    # Navigate to the Frontend object
+    if "objects" in data and isinstance(data["objects"], list):
+        for obj in data["objects"]:
+            if obj.get("kind") == "Frontend":
+                # Extract module name from metadata.name
+                metadata = obj.get("metadata", {})
+                module_name = metadata.get("name")
+                if module_name:
+                    return module_name
+
+    return None
