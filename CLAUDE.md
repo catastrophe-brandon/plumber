@@ -102,6 +102,19 @@ application routes come from app_urls (extracted from frontend.yaml), not hardco
 **Cause:** Previously had hardcoded `/apps/{{ app_name }}*` route plus dynamic routes from frontend.yaml
 **Status:** ✅ Fixed - Removed hardcoded route since dynamic routes from frontend.yaml already cover it.
 
+## Validation
+
+### Federated Module Validation
+
+Plumber now includes automatic validation to ensure federated modules don't contain `try_files` directives:
+
+- **What it checks:** After generating the Caddyfile, validates that if `is_federated=True`, the config contains no `try_files` directives
+- **When it runs:** Automatically during `generate_app_caddyfile()` execution
+- **Error message:** Raises `ValueError` with clear explanation if validation fails
+- **Why it matters:** Prevents the common error of federated modules trying to serve non-existent index.html files
+
+This validation acts as a safety net to catch template bugs or regressions early, before the invalid config reaches production.
+
 ## Testing Changes
 
 After modifying Plumber:

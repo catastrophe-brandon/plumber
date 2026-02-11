@@ -36,6 +36,28 @@ def validate_yaml_file(file_path: str) -> None:
         print("   Install with: pip install yamllint", file=sys.stderr)
 
 
+def validate_federated_module_config(caddyfile_content: str, is_federated: bool) -> None:
+    """
+    Validate that federated module configurations don't contain try_files directives.
+
+    Federated modules should NOT have try_files directives because they don't have
+    index.html files - only fed-mods.json and JavaScript bundles.
+
+    Args:
+        caddyfile_content: The generated Caddyfile configuration
+        is_federated: Whether this is a federated module
+
+    Raises:
+        ValueError: If a federated module config contains try_files
+    """
+    if is_federated and "try_files" in caddyfile_content:
+        raise ValueError(
+            "❌ Validation failed: Federated module configuration contains 'try_files' directive.\n"
+            "   Federated modules do not have index.html and should not use try_files.\n"
+            "   This indicates a bug in the template generation logic."
+        )
+
+
 def generate_app_caddyfile(
     app_url_value: list[str],
     app_name: str,
@@ -71,6 +93,9 @@ def generate_app_caddyfile(
         app_urls=app_url_value,
         is_federated=is_federated,
     )
+
+    # Validate that federated modules don't have try_files directives
+    validate_federated_module_config(rendered, is_federated)
 
     return rendered
 
