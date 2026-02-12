@@ -6,6 +6,94 @@ Hackathon tool - Automatically generate Kubernetes ConfigMaps with Caddy configu
 
 Plumber automates the process of generating Kubernetes ConfigMap YAML files containing Caddyfile configurations for frontend applications. It reads your application's configuration files (`frontend.yaml` or `fec.config.js`), extracts route configurations, and generates ConfigMaps ready to be used in any testing environment (Tekton, Kubernetes, Minikube, etc.).
 
+## Intended Use Case: Federated Modules
+
+**IMPORTANT**: Plumber is designed specifically for **federated modules** (micro-frontends) that are loaded into a shell application, NOT for standalone applications with their own navigation.
+
+### What are Federated Modules?
+Federated modules are micro-frontend components that:
+- Export components via module federation (typically using `fed-mods.json` manifest)
+- Are loaded into a shell application (like insights-chrome or HCC chrome)
+- Do NOT have their own top-level navigation or shell
+- Serve static assets from paths like `/apps/<app-name>/`
+
+### Examples of Federated Modules:
+- `insights-rbac-ui` - Loaded into chrome shell, serves from `/apps/rbac/`
+- `learning-resources` - Loaded into chrome shell, serves from `/apps/learning-resources/`
+
+### What Plumber is NOT for:
+- Standalone applications with their own shell/navigation
+- Applications that serve their own `index.html` at the root path
+- Applications that don't use module federation
+
+## Critical Guidelines
+
+### 🚫 DO NOT Manually Edit Generated ConfigMaps
+
+**NEVER manually edit or craft ConfigMaps when troubleshooting issues.** This is a critical anti-pattern that leads to:
+- Configuration drift between generated and deployed configs
+- Difficult-to-debug routing issues
+- Lost changes when ConfigMaps are regenerated
+- Inconsistent behavior across environments
+
+**Instead, when troubleshooting:**
+1. Fix the source configuration (`frontend.yaml` or `fec.config.js`)
+2. Re-run Plumber to regenerate ConfigMaps
+3. Review the new output for correctness
+4. Submit the regenerated ConfigMaps
+
+### ✅ Always Validate Generated ConfigMaps
+
+After generating ConfigMaps, **use Claude Code or Claude to review the ConfigMap content** for potential issues:
+
+**Recommended Validation Workflow:**
+```bash
+# After running Plumber, ask Claude to review the generated ConfigMaps:
+# "Please review the generated ConfigMaps and check for errant navigation paths"
+```
+
+**Claude will check for:**
+- Navigation routes (like `/iam/*`, `/settings/*`, `/insights/*`) appearing in the proxy ConfigMap
+- Routes that should go to the chrome shell being sent to your app (port 8000)
+- Missing wildcards on app routes (should be `/apps/myapp*` not `/apps/myapp`)
+- Overly broad path patterns that capture unintended routes
+
+**Example of CORRECT proxy ConfigMap (v2 - no chrome sidecar):**
+```yaml
+data:
+  routes: |
+    # Only route app-specific requests to the local container
+    # All other requests fall through to the catch-all handler which proxies to HCC_ENV_URL
+    handle /apps/rbac* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /settings/rbac* {
+        reverse_proxy 127.0.0.1:8000
+    }
+```
+
+**Example of INCORRECT proxy ConfigMap (errant navigation paths):**
+```yaml
+data:
+  routes: |
+    # ❌ BAD: Navigation routes should NOT be here
+    handle /iam* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /settings* {  # ❌ BAD: Too broad, includes all settings
+        reverse_proxy 127.0.0.1:8000
+    }
+```
+
+**If Issues are Found:**
+1. 🚫 **DO NOT manually edit the ConfigMap** - this defeats the purpose of automated generation
+2. ✅ **Submit an issue to the Plumber repository**: https://github.com/catastrophe-brandon/plumber/issues
+   - Include the generated ConfigMap content
+   - Describe what routes are incorrect
+   - Include your `frontend.yaml` or `fec.config.js` content
+   - Explain the expected vs. actual behavior
+3. ✅ The Plumber maintainers will fix the generation logic to handle your use case correctly
+
 ## Features
 
 ### ConfigMap Generation
@@ -30,12 +118,8 @@ Plumber automates the process of generating Kubernetes ConfigMap YAML files cont
 
 ### Configuration Extraction
 - **Frontend YAML Support**: Parse `frontend.yaml` (or `frontend.yml`) to extract paths from:
-  - `spec.frontend.paths[]` - Basic application paths
-  - `spec.module.modules[].routes[].pathname` - Module route definitions
-  - `spec.searchEntries[].href` - Search entry navigation routes
-  - `spec.serviceTiles[].href` - Service tile navigation routes
-  - `spec.bundleSegments[].navItems[].href` - Direct navigation item links
-  - `spec.bundleSegments[].navItems[].routes[].href` - Nested navigation routes (e.g., `/iam/user-access/users`)
+  - `spec.frontend.paths[]`
+  - `spec.module.modules[].routes[].pathname`
 - **FEC Config Support**: Parse JavaScript `fec.config.js` files to extract application URLs
   - Supports both string and array formats: `appUrl: '/path'` or `appUrl: ['/path1', '/path2']`
   - Handles both single and double quotes
@@ -143,8 +227,7 @@ app_urls = get_app_url_from_frontend_yaml()
 
 # Or specify a custom path
 app_urls = get_app_url_from_frontend_yaml("path/to/deploy/frontend.yaml")
-# Returns: ['/apps/my-app', '/iam/user-access/users', '/iam/user-access/groups', ...]
-# Extracts from all navigation structures including nested routes
+# Returns: ['/apps/my-app', '/staging/my-app', ...]
 ```
 
 #### Extract appUrl from fec.config.js

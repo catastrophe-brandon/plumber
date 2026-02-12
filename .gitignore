@@ -212,3 +212,4 @@ fec_configs/
 
 # Generated pipeline files
 *-caddyfile.yaml
+*.yaml
