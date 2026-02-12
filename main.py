@@ -5,6 +5,7 @@ from extraction import (
     get_app_url_from_fec_config,
     get_app_url_from_frontend_yaml,
     get_module_name_from_frontend_yaml,
+    get_proxy_routes_from_frontend_yaml,
     is_federated_module,
 )
 from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
@@ -82,6 +83,30 @@ def run_plumber(
         app_url_value = [f"/{app_name}"]
         print(f"Using default routes: {app_url_value}")
 
+    # Extract proxy routes (asset paths only, not navigation routes)
+    # For federated modules, proxy should only route /apps/* and /settings/* paths,
+    # NOT navigation routes like /iam/* which should fall through to Chrome shell
+    proxy_routes = None
+    try:
+        proxy_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
+        if proxy_routes:
+            print(f"✓ Extracted proxy routes (asset paths only): {proxy_routes}")
+            if len(proxy_routes) < len(app_url_value):
+                excluded_count = len(app_url_value) - len(proxy_routes)
+                print(
+                    f"  Note: Excluded {excluded_count} navigation route(s) "
+                    f"that should fall through to Chrome shell"
+                )
+    except (FileNotFoundError, ValueError):
+        print(
+            f"Note: Could not extract proxy routes from {frontend_yaml_path}, using all app routes"
+        )
+
+    # Fall back to app_url_value if proxy routes couldn't be extracted
+    if not proxy_routes:
+        proxy_routes = app_url_value
+        print(f"Using all app routes for proxy: {proxy_routes}")
+
     # Generate app Caddy ConfigMap
     app_configmap_path = generate_app_caddy_configmap(
         configmap_name=app_configmap_name,
@@ -93,10 +118,10 @@ def run_plumber(
     )
     print(f"\n✓ Generated app Caddy ConfigMap: {app_configmap_path}")
 
-    # Generate proxy Caddy ConfigMap
+    # Generate proxy Caddy ConfigMap (using proxy_routes, not app_url_value)
     proxy_configmap_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
-        app_url_value=app_url_value,
+        app_url_value=proxy_routes,  # Use proxy routes, not all routes
         app_name=app_name,
         app_port=app_port,
         namespace=namespace,

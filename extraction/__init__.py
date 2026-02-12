@@ -71,6 +71,74 @@ def get_app_url_from_fec_config(config_path: str = "fec.config.js") -> list[str]
         return None
 
 
+def get_proxy_routes_from_frontend_yaml(
+    yaml_path: str = "deploy/frontend.yaml",
+) -> list[str] | None:
+    """
+    Extract proxy routes (asset paths only) from frontend.yaml file.
+
+    This extracts ONLY the paths that should be proxied to the local app container:
+    - spec.frontend.paths[] (e.g., /apps/rbac)
+    - spec.module.modules[].routes[].pathname (e.g., /settings/rbac)
+
+    This does NOT include navigation routes (searchEntries, serviceTiles, bundleSegments)
+    because those should fall through to the Chrome shell in the stage environment.
+
+    Args:
+        yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
+
+    Returns:
+        List of unique proxy routes, or None if not found
+
+    Raises:
+        FileNotFoundError: If frontend.yaml is not found
+    """
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"frontend.yaml not found at: {yaml_path}")
+
+    # Read and parse the YAML file
+    with open(yaml_path) as f:
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML file: {e}")
+
+    paths = []
+
+    # Navigate to the Frontend spec
+    # The file is a Template with objects array
+    if "objects" in data and isinstance(data["objects"], list):
+        for obj in data["objects"]:
+            if obj.get("kind") == "Frontend":
+                spec = obj.get("spec", {})
+
+                # Extract from spec.frontend.paths[]
+                frontend_paths = spec.get("frontend", {}).get("paths", [])
+                if isinstance(frontend_paths, list):
+                    paths.extend(frontend_paths)
+
+                # Extract from spec.module.modules[].routes[].pathname
+                modules = spec.get("module", {}).get("modules", [])
+                if isinstance(modules, list):
+                    for module in modules:
+                        routes = module.get("routes", [])
+                        if isinstance(routes, list):
+                            for route in routes:
+                                pathname = route.get("pathname")
+                                if pathname:
+                                    paths.append(pathname)
+
+    # Return unique paths, preserving order
+    seen = set()
+    unique_paths = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            unique_paths.append(path)
+
+    return unique_paths if unique_paths else None
+
+
 def get_app_url_from_frontend_yaml(yaml_path: str = "deploy/frontend.yaml") -> list[str] | None:
     """
     Extract application paths from frontend.yaml file.

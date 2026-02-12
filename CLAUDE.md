@@ -62,6 +62,52 @@ Using the wrong name causes mismatched routes:
 2. This overrides the CLI `app_name` argument if found
 3. Prevents mismatches when repo name differs from module name
 
+## Proxy Routes vs Navigation Routes
+
+Plumber distinguishes between two types of routes in frontend.yaml:
+
+### 1. Proxy Routes (Asset Paths)
+Routes that serve the actual application code and should be proxied to the local container (port 8000):
+- `spec.frontend.paths[]` - e.g., `/apps/rbac`
+- `spec.module.modules[].routes[].pathname` - e.g., `/settings/rbac`
+
+These are extracted by `get_proxy_routes_from_frontend_yaml()` and used in the **proxy ConfigMap**.
+
+### 2. Navigation Routes
+Routes that are menu/navigation links served by the Chrome shell and should fall through to the stage environment:
+- `spec.searchEntries[].href` - e.g., `/iam/user-access/users`
+- `spec.serviceTiles[].href` - e.g., `/iam/user-access/groups`
+- `spec.bundleSegments[].navItems[].href` - e.g., `/iam/my-user-access`
+- `spec.bundleSegments[].navItems[].routes[].href` - e.g., `/iam/access-management/roles`
+
+These are included in the **app ConfigMap** (for reference) but excluded from the **proxy ConfigMap**.
+
+### Why This Matters
+
+**Problem:** If navigation routes are proxied to port 8000:
+1. Browser requests `/iam/my-user-access`
+2. Proxy sends it to port 8000 (app container)
+3. Port 8000 serves static files from `/srv/dist` - no HTML exists for this navigation route
+4. Browser gets empty `<html><head></head><body></body></html>`
+
+**Solution:** Only proxy asset paths to port 8000:
+1. Browser requests `/iam/my-user-access`
+2. Proxy doesn't match any handler, falls through to catch-all
+3. Catch-all sends it to stage environment
+4. Stage environment's Chrome shell serves the HTML page with navigation
+5. Chrome shell discovers federated module at `/apps/rbac/fed-mods.json`
+6. Proxy routes `/apps/rbac/*` to port 8000 for the module assets
+
+### Implementation
+
+```python
+# Extract all routes (for app ConfigMap)
+app_url_value = get_app_url_from_frontend_yaml(frontend_yaml_path)
+
+# Extract only proxy routes (for proxy ConfigMap)
+proxy_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
+```
+
 ## ConfigMap Generation Process
 
 ```mermaid
@@ -101,6 +147,10 @@ application routes come from app_urls (extracted from frontend.yaml), not hardco
 ### Issue: Duplicate routes in generated config
 **Cause:** Previously had hardcoded `/apps/{{ app_name }}*` route plus dynamic routes from frontend.yaml
 **Status:** ✅ Fixed - Removed hardcoded route since dynamic routes from frontend.yaml already cover it.
+
+### Issue: Navigation routes (like /iam/*) return empty HTML
+**Cause:** Proxy ConfigMap routes ALL paths (including navigation routes) to port 8000, but port 8000 only serves static assets, not Chrome shell pages
+**Fix:** ✅ Fixed - Plumber now uses `get_proxy_routes_from_frontend_yaml()` to only proxy asset paths (`spec.frontend.paths` and `spec.module.modules[].routes[]`), not navigation routes (`spec.searchEntries`, `spec.serviceTiles`, `spec.bundleSegments`). Navigation routes fall through to the Chrome shell in the stage environment.
 
 ## Validation
 
