@@ -473,7 +473,7 @@ objects:
 
 
 def test_frontend_yaml_extracts_navigation_routes(tmp_path):
-    """Test navigation routes from frontend.yaml are extracted and included in Caddy configs."""
+    """Test that navigation routes are extracted but NOT included in proxy ConfigMap."""
     import shutil
 
     test_app_name = "rbac"
@@ -540,34 +540,62 @@ objects:
     yaml_path = tmp_path / "frontend.yaml"
     yaml_path.write_text(frontend_yaml_content)
 
-    # Import the extraction function
-    from extraction import get_app_url_from_frontend_yaml
+    # Import the extraction functions
+    from extraction import get_app_url_from_frontend_yaml, get_proxy_routes_from_frontend_yaml
 
-    # Extract paths
-    paths = get_app_url_from_frontend_yaml(str(yaml_path))
+    # Extract all paths (for app ConfigMap)
+    all_paths = get_app_url_from_frontend_yaml(str(yaml_path))
 
     # Verify all expected paths are extracted
-    assert paths is not None, "Should extract paths from frontend.yaml"
-    assert "/apps/rbac" in paths, "Should extract from spec.frontend.paths"
-    assert "/settings/rbac" in paths, "Should extract from spec.module.modules[].routes[].pathname"
-    assert "/iam" in paths, "Should extract from spec.module.modules[].routes[].pathname"
-    assert "/iam/user-access/users" in paths, "Should extract from searchEntries[].href"
-    assert "/iam/user-access/groups" in paths, "Should extract from serviceTiles[].href"
-    assert "/iam/user-access/overview" in paths, (
+    assert all_paths is not None, "Should extract paths from frontend.yaml"
+    assert "/apps/rbac" in all_paths, "Should extract from spec.frontend.paths"
+    assert "/settings/rbac" in all_paths, (
+        "Should extract from spec.module.modules[].routes[].pathname"
+    )
+    assert "/iam" in all_paths, "Should extract from spec.module.modules[].routes[].pathname"
+    assert "/iam/user-access/users" in all_paths, "Should extract from searchEntries[].href"
+    assert "/iam/user-access/groups" in all_paths, "Should extract from serviceTiles[].href"
+    assert "/iam/user-access/overview" in all_paths, (
         "Should extract from bundleSegments[].navItems[].href"
     )
-    assert "/iam/my-user-access" in paths, "Should extract from bundleSegments[].navItems[].href"
-    assert "/iam/access-management/users-and-user-groups" in paths, (
+    assert "/iam/my-user-access" in all_paths, (
+        "Should extract from bundleSegments[].navItems[].href"
+    )
+    assert "/iam/access-management/users-and-user-groups" in all_paths, (
         "Should extract from bundleSegments[].navItems[].routes[].href"
     )
-    assert "/iam/access-management/roles" in paths, (
+    assert "/iam/access-management/roles" in all_paths, (
         "Should extract from bundleSegments[].navItems[].routes[].href"
     )
 
     # Verify the paths are unique
-    assert len(paths) == len(set(paths)), "Paths should be unique"
+    assert len(all_paths) == len(set(all_paths)), "Paths should be unique"
 
-    # Now verify these paths make it into the generated ConfigMaps
+    # Extract proxy routes (asset paths only, not navigation routes)
+    proxy_routes = get_proxy_routes_from_frontend_yaml(str(yaml_path))
+
+    # Verify proxy routes contain ONLY asset paths
+    assert proxy_routes is not None, "Should extract proxy routes"
+    assert "/apps/rbac" in proxy_routes, "Should include spec.frontend.paths"
+    assert "/settings/rbac" in proxy_routes, "Should include spec.module.modules[].routes"
+    assert "/iam" in proxy_routes, "Should include spec.module.modules[].routes"
+
+    # Verify navigation routes are NOT in proxy routes
+    assert "/iam/user-access/users" not in proxy_routes, "Should exclude searchEntries"
+    assert "/iam/user-access/groups" not in proxy_routes, "Should exclude serviceTiles"
+    assert "/iam/user-access/overview" not in proxy_routes, "Should exclude bundleSegments navItems"
+    assert "/iam/my-user-access" not in proxy_routes, "Should exclude bundleSegments navItems"
+    assert "/iam/access-management/users-and-user-groups" not in proxy_routes, (
+        "Should exclude bundleSegments navItems routes"
+    )
+    assert "/iam/access-management/roles" not in proxy_routes, (
+        "Should exclude bundleSegments navItems routes"
+    )
+
+    # Verify proxy routes are fewer than all paths
+    assert len(proxy_routes) < len(all_paths), "Proxy routes should be a subset of all paths"
+
+    # Now verify the proxy ConfigMap only contains asset paths
     original_dir = os.getcwd()
     try:
         # Copy template directory to tmp_path so templates can be found
@@ -587,20 +615,37 @@ objects:
             frontend_yaml_path=str(yaml_path),
         )
 
-        # Verify proxy ConfigMap includes navigation routes
+        # Verify proxy ConfigMap only contains asset paths
         proxy_path = tmp_path / "rbac-proxy-caddy.yaml"
         assert proxy_path.exists(), "Proxy ConfigMap should be generated"
 
         proxy_configmap = yaml.safe_load(proxy_path.read_text())
         proxy_data = proxy_configmap["data"]["routes"]
 
-        # Verify navigation routes are in the proxy config
-        assert "handle /iam/user-access/users*" in proxy_data
-        assert "handle /iam/user-access/groups*" in proxy_data
-        assert "handle /iam/user-access/overview*" in proxy_data
-        assert "handle /iam/my-user-access*" in proxy_data
-        assert "handle /iam/access-management/users-and-user-groups*" in proxy_data
-        assert "handle /iam/access-management/roles*" in proxy_data
+        # Verify asset paths ARE in the proxy config
+        assert "handle /apps/rbac*" in proxy_data, "Should include /apps/rbac asset path"
+        assert "handle /settings/rbac*" in proxy_data, "Should include /settings/rbac asset path"
+        assert "handle /iam*" in proxy_data, "Should include /iam module route"
+
+        # Verify navigation routes are NOT in the proxy config
+        assert "handle /iam/user-access/users*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
+        assert "handle /iam/user-access/groups*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
+        assert "handle /iam/user-access/overview*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
+        assert "handle /iam/my-user-access*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
+        assert "handle /iam/access-management/users-and-user-groups*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
+        assert "handle /iam/access-management/roles*" not in proxy_data, (
+            "Should NOT include navigation route"
+        )
 
     finally:
         # Restore original directory
