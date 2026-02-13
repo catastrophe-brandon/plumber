@@ -175,9 +175,12 @@ def generate_configmap(
     Returns:
         ConfigMap YAML as a string
     """
+    # Strip leading/trailing whitespace from content to avoid extra blank lines
+    cleaned_content = caddyfile_content.strip()
+
     # Indent each line of the Caddyfile content with 4 spaces (for YAML)
     indented_content = "\n".join(
-        "    " + line if line else "" for line in caddyfile_content.split("\n")
+        "    " + line if line else "" for line in cleaned_content.split("\n")
     )
 
     # Build namespace line if provided

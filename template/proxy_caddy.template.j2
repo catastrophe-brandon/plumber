@@ -1,12 +1,12 @@
-{# Asset routes - proxy to local app container #}
-{% for route_path in asset_routes %}
+{#- Asset routes - proxy to local app container -#}
+{%- for route_path in asset_routes %}
 handle {{ route_path }}* {
     reverse_proxy 127.0.0.1:{{ app_port }}
 }
 {%- endfor %}
 
-{# Chrome shell routes - proxy to stage environment #}
-{% for route_path in chrome_routes %}
+{#- Chrome shell routes - proxy to stage environment -#}
+{%- for route_path in chrome_routes %}
 handle {{ route_path }}* {
     reverse_proxy {{ stage_env_url }}
 }
