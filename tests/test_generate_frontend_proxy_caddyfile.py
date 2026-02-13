@@ -16,9 +16,7 @@ def test_generate_proxy_routes_caddyfile():
         "/",
     ]
 
-    result = generate_proxy_routes_caddyfile(
-        asset_routes=asset_routes, chrome_routes=chrome_routes
-    )
+    result = generate_proxy_routes_caddyfile(asset_routes=asset_routes, chrome_routes=chrome_routes)
 
     # Verify the result is a string
     assert isinstance(result, str)

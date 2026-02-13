@@ -582,7 +582,9 @@ objects:
     # Verify proxy routes (asset routes) contain ONLY /apps/* and /settings/* paths
     assert proxy_routes is not None, "Should extract proxy routes"
     assert "/apps/rbac" in proxy_routes, "Should include spec.frontend.paths"
-    assert "/settings/rbac" in proxy_routes, "Should include spec.module.modules[].routes (asset paths)"
+    assert "/settings/rbac" in proxy_routes, (
+        "Should include spec.module.modules[].routes (asset paths)"
+    )
 
     # Verify /iam is NOT in asset routes (it's a Chrome shell bundle mount)
     assert "/iam" not in proxy_routes, "Should exclude Chrome shell bundle mounts from asset routes"
@@ -642,13 +644,17 @@ objects:
         # Verify asset paths ARE in the proxy config and route to localhost
         assert "handle /apps/rbac*" in proxy_data, "Should include /apps/rbac asset path"
         assert "handle /settings/rbac*" in proxy_data, "Should include /settings/rbac asset path"
-        assert "reverse_proxy 127.0.0.1:8000" in proxy_data, "Asset routes should proxy to localhost"
+        assert "reverse_proxy 127.0.0.1:8000" in proxy_data, (
+            "Asset routes should proxy to localhost"
+        )
 
         # Verify Chrome shell routes ARE in the proxy config and route to stage environment
         assert "handle /iam*" in proxy_data, "Should include /iam Chrome shell route"
         assert "handle /apps/chrome*" in proxy_data, "Should include /apps/chrome route"
-        assert "handle /*" in proxy_data or 'handle / ' in proxy_data, "Should include / route"
-        assert "reverse_proxy {env.HCC_ENV_URL}" in proxy_data, "Chrome routes should proxy to stage env"
+        assert "handle /*" in proxy_data or "handle / " in proxy_data, "Should include / route"
+        assert "reverse_proxy {env.HCC_ENV_URL}" in proxy_data, (
+            "Chrome routes should proxy to stage env"
+        )
 
         # Verify navigation routes are NOT in the proxy config
         assert "handle /iam/user-access/users*" not in proxy_data, (
