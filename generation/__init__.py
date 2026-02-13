@@ -36,24 +36,30 @@ def validate_yaml_file(file_path: str) -> None:
         print("   Install with: pip install yamllint", file=sys.stderr)
 
 
-def validate_federated_module_config(caddyfile_content: str, is_federated: bool) -> None:
+def validate_app_config(caddyfile_content: str) -> None:
     """
-    Validate that federated module configurations don't contain try_files directives.
+    Validate that app configurations don't contain routing directives.
 
-    Federated modules should NOT have try_files directives because they don't have
-    index.html files - only fed-mods.json and JavaScript bundles.
+    App containers only serve static files. The proxy handles all routing logic,
+    so app configs should not contain try_files or rewrite directives.
 
     Args:
         caddyfile_content: The generated Caddyfile configuration
-        is_federated: Whether this is a federated module
 
     Raises:
-        ValueError: If a federated module config contains try_files
+        ValueError: If config contains try_files or rewrite directives
     """
-    if is_federated and "try_files" in caddyfile_content:
+    if "try_files" in caddyfile_content:
         raise ValueError(
-            "❌ Validation failed: Federated module configuration contains 'try_files' directive.\n"
-            "   Federated modules do not have index.html and should not use try_files.\n"
+            "❌ Validation failed: App configuration contains 'try_files' directive.\n"
+            "   The proxy handles routing. App container only serves static files.\n"
+            "   This indicates a bug in the template generation logic."
+        )
+
+    if "rewrite" in caddyfile_content:
+        raise ValueError(
+            "❌ Validation failed: App configuration contains 'rewrite' directive.\n"
+            "   The proxy handles routing. App container only serves static files.\n"
             "   This indicates a bug in the template generation logic."
         )
 
@@ -94,29 +100,37 @@ def generate_app_caddyfile(
         is_federated=is_federated,
     )
 
-    # Validate that federated modules don't have try_files directives
-    validate_federated_module_config(rendered, is_federated)
+    # Validate that app config doesn't have routing directives
+    validate_app_config(rendered)
 
     return rendered
 
 
 def generate_proxy_routes_caddyfile(
-    app_url_value: list[str],
-    app_name: str,
+    asset_routes: list[str],
+    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
+    stage_env_url: str | None = None,
     template_path: str = "template/proxy_caddy.template.j2",
 ) -> str:
     """
     Generate Caddyfile configuration snippets for proxy routes using a template.
 
     Args:
-        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
-        app_name: Name of the application
+        asset_routes: List of asset paths that route to local app
+            (e.g., ["/apps/rbac", "/settings/rbac"])
+        chrome_routes: List of Chrome shell paths that route to stage env
+            (e.g., ["/iam", "/apps/chrome"])
         app_port: Port for the application (default: "8000")
+        stage_env_url: Stage environment URL for Chrome shell routes
+            (e.g., "https://stage.foo.redhat.com"). Required if chrome_routes is not empty.
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 
     Returns:
         Caddyfile configuration snippets as a string
+
+    Raises:
+        ValueError: If chrome_routes is provided but stage_env_url is None
     """
     # Set up Jinja2 environment
     template_dir = os.path.dirname(template_path)
@@ -124,11 +138,23 @@ def generate_proxy_routes_caddyfile(
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template(template_file)
 
-    # Render the template with app_url_value routes
+    # Default to empty list if no Chrome routes provided
+    if chrome_routes is None:
+        chrome_routes = []
+
+    # Require stage_env_url if we have Chrome routes
+    if chrome_routes and stage_env_url is None:
+        raise ValueError(
+            "stage_env_url is required when chrome_routes are specified. "
+            "Provide a stage environment URL via --stage-env-url argument."
+        )
+
+    # Render the template with both asset and Chrome routes
     rendered = template.render(
-        app_name=app_name,
+        asset_routes=asset_routes,
+        chrome_routes=chrome_routes,
         app_port=app_port,
-        route_prefixes=app_url_value,
+        stage_env_url=stage_env_url,
     )
 
     return rendered
@@ -149,9 +175,12 @@ def generate_configmap(
     Returns:
         ConfigMap YAML as a string
     """
+    # Strip leading/trailing whitespace from content to avoid extra blank lines
+    cleaned_content = caddyfile_content.strip()
+
     # Indent each line of the Caddyfile content with 4 spaces (for YAML)
     indented_content = "\n".join(
-        "    " + line if line else "" for line in caddyfile_content.split("\n")
+        "    " + line if line else "" for line in cleaned_content.split("\n")
     )
 
     # Build namespace line if provided
@@ -217,29 +246,36 @@ def generate_app_caddy_configmap(
 
 def generate_proxy_caddy_configmap(
     configmap_name: str,
-    app_url_value: list[str],
-    app_name: str,
+    asset_routes: list[str],
+    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
     namespace: str | None = None,
+    stage_env_url: str | None = None,
 ) -> str:
     """
     Generate proxy routes Caddyfile and wrap it in a ConfigMap YAML.
 
     Args:
         configmap_name: Name for the ConfigMap
-        app_url_value: List of URL paths from appUrl
-        app_name: Name of the application
+        asset_routes: List of asset paths that route to local app
+        chrome_routes: List of Chrome shell paths that route to stage env
         app_port: Port for the application (default: "8000")
         namespace: Optional namespace for the ConfigMap
+        stage_env_url: Stage environment URL for Chrome shell routes.
+            Required if chrome_routes is not empty.
 
     Returns:
         Path to the generated ConfigMap YAML file
+
+    Raises:
+        ValueError: If chrome_routes is provided but stage_env_url is None
     """
     # Generate the proxy routes Caddyfile
     proxy_caddyfile = generate_proxy_routes_caddyfile(
-        app_url_value=app_url_value,
-        app_name=app_name,
+        asset_routes=asset_routes,
+        chrome_routes=chrome_routes,
         app_port=app_port,
+        stage_env_url=stage_env_url,
     )
 
     # Wrap in ConfigMap with "routes" as the data key

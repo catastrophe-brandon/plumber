@@ -8,7 +8,7 @@ from generation import (
     generate_app_caddy_configmap,
     generate_app_caddyfile,
     generate_proxy_caddy_configmap,
-    validate_federated_module_config,
+    validate_app_config,
 )
 
 
@@ -54,6 +54,16 @@ def test_generate_app_caddy_configmap():
         assert f"/apps/{test_app_name}" in caddyfile_content
         assert "settings" in caddyfile_content  # Route prefix
 
+        # CRITICAL: Verify no try_files or rewrite directives (proxy handles routing)
+        assert "try_files" not in caddyfile_content, (
+            "App ConfigMap should not contain try_files directives. "
+            "The proxy handles all routing, app container only serves static files."
+        )
+        assert "rewrite" not in caddyfile_content, (
+            "App ConfigMap should not contain rewrite directives. "
+            "The proxy handles all routing, app container only serves static files."
+        )
+
     finally:
         # Clean up
         if os.path.exists(output_path):
@@ -62,16 +72,18 @@ def test_generate_app_caddy_configmap():
 
 def test_generate_proxy_caddy_configmap():
     """Test that proxy Caddy ConfigMap is generated correctly."""
-    test_app_name = "test-app"
     test_configmap_name = "test-proxy-caddy"
-    test_app_urls = ["/settings/test-app", "/apps/test-app"]
+    test_asset_routes = ["/settings/test-app", "/apps/test-app"]
+    test_chrome_routes = ["/iam", "/apps/chrome", "/", "/index.html"]
+    test_stage_url = "https://stage.foo.redhat.com"
 
     # Generate the ConfigMap
     output_path = generate_proxy_caddy_configmap(
         configmap_name=test_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
+        asset_routes=test_asset_routes,
+        chrome_routes=test_chrome_routes,
         app_port="8000",
+        stage_env_url=test_stage_url,
     )
 
     try:
@@ -99,9 +111,26 @@ def test_generate_proxy_caddy_configmap():
         assert "routes" in data, "routes key not found in data"
 
         routes_content = data["routes"]
-        assert f"handle /apps/{test_app_name}*" in routes_content
+
+        # Verify asset routes go to localhost
+        assert "handle /apps/test-app*" in routes_content
         assert "handle /settings/test-app*" in routes_content
         assert "reverse_proxy 127.0.0.1:8000" in routes_content
+
+        # Verify Chrome routes go to stage environment
+        assert "handle /iam*" in routes_content
+        assert "handle /apps/chrome*" in routes_content
+        assert f"reverse_proxy {test_stage_url}" in routes_content
+
+        # CRITICAL: Verify no environment variable syntax is present (we use direct substitution)
+        assert "${HCC_ENV_URL}" not in routes_content, (
+            "Generated config should not contain ${HCC_ENV_URL}. "
+            "Stage URL should be directly substituted from --stage-env-url argument."
+        )
+        assert "{env.HCC_ENV_URL}" not in routes_content, (
+            "Generated config should not contain {env.HCC_ENV_URL}. "
+            "Stage URL should be directly substituted from --stage-env-url argument."
+        )
 
     finally:
         # Clean up
@@ -115,6 +144,7 @@ def test_configmap_names_are_respected():
     app_configmap_name = "custom-app-config"
     proxy_configmap_name = "custom-proxy-config"
     test_app_urls = ["/my-app"]
+    test_asset_routes = ["/apps/my-app"]
 
     # Generate both ConfigMaps
     app_path = generate_app_caddy_configmap(
@@ -125,8 +155,8 @@ def test_configmap_names_are_respected():
 
     proxy_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
+        asset_routes=test_asset_routes,
+        chrome_routes=[],  # No Chrome routes for this test
     )
 
     try:
@@ -196,8 +226,8 @@ module.exports = {
 
         proxy_path = generate_proxy_caddy_configmap(
             configmap_name=proxy_configmap_name,
-            app_url_value=app_urls,
-            app_name=test_app_name,
+            asset_routes=app_urls,
+            chrome_routes=[],  # No Chrome routes for this test
         )
 
         # Verify both ConfigMaps
@@ -246,8 +276,8 @@ def test_configmap_with_namespace():
 
     proxy_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
+        asset_routes=test_app_urls,
+        chrome_routes=[],  # No Chrome routes for this test
         namespace=test_namespace,
     )
 
@@ -314,6 +344,7 @@ def test_fallback_from_frontend_yaml_to_fec_config(tmp_path):
             proxy_configmap_name="fallback-proxy-caddy",
             fec_config_path=str(fec_config_path),
             frontend_yaml_path=nonexistent_yaml,
+            stage_env_url="https://stage.foo.redhat.com",
         )
 
         # Verify the generated ConfigMaps use fec.config.js values
@@ -368,6 +399,7 @@ def test_fallback_to_default_when_both_missing(tmp_path):
             proxy_configmap_name="default-proxy-caddy",
             fec_config_path=nonexistent_fec,
             frontend_yaml_path=nonexistent_yaml,
+            stage_env_url="https://stage.foo.redhat.com",
         )
 
         # Verify the generated ConfigMaps use default routes
@@ -448,6 +480,7 @@ objects:
             proxy_configmap_name="precedence-proxy-caddy",
             fec_config_path=str(fec_path),
             frontend_yaml_path=str(yaml_path),
+            stage_env_url="https://stage.foo.redhat.com",
         )
 
         # Verify the generated ConfigMaps use frontend.yaml values (not fec.config.js)
@@ -574,11 +607,15 @@ objects:
     # Extract proxy routes (asset paths only, not navigation routes)
     proxy_routes = get_proxy_routes_from_frontend_yaml(str(yaml_path))
 
-    # Verify proxy routes contain ONLY asset paths
+    # Verify proxy routes (asset routes) contain ONLY /apps/* and /settings/* paths
     assert proxy_routes is not None, "Should extract proxy routes"
     assert "/apps/rbac" in proxy_routes, "Should include spec.frontend.paths"
-    assert "/settings/rbac" in proxy_routes, "Should include spec.module.modules[].routes"
-    assert "/iam" in proxy_routes, "Should include spec.module.modules[].routes"
+    assert "/settings/rbac" in proxy_routes, (
+        "Should include spec.module.modules[].routes (asset paths)"
+    )
+
+    # Verify /iam is NOT in asset routes (it's a Chrome shell bundle mount)
+    assert "/iam" not in proxy_routes, "Should exclude Chrome shell bundle mounts from asset routes"
 
     # Verify navigation routes are NOT in proxy routes
     assert "/iam/user-access/users" not in proxy_routes, "Should exclude searchEntries"
@@ -595,6 +632,16 @@ objects:
     # Verify proxy routes are fewer than all paths
     assert len(proxy_routes) < len(all_paths), "Proxy routes should be a subset of all paths"
 
+    # Extract Chrome shell routes
+    from extraction import get_chrome_routes_from_frontend_yaml
+
+    chrome_routes = get_chrome_routes_from_frontend_yaml(str(yaml_path))
+    assert chrome_routes is not None, "Should extract Chrome shell routes"
+    assert "/iam" in chrome_routes, "Should include Chrome shell bundle mounts"
+    assert "/apps/chrome" in chrome_routes, "Should include standard Chrome route"
+    assert "/" in chrome_routes, "Should include root route"
+    assert "/index.html" in chrome_routes, "Should include index.html route"
+
     # Now verify the proxy ConfigMap only contains asset paths
     original_dir = os.getcwd()
     try:
@@ -605,6 +652,8 @@ objects:
 
         from main import run_plumber
 
+        test_stage_url = "https://stage.foo.redhat.com"
+
         # Generate ConfigMaps
         run_plumber(
             app_name=test_app_name,
@@ -613,6 +662,7 @@ objects:
             proxy_configmap_name="rbac-proxy-caddy",
             fec_config_path="nonexistent.js",
             frontend_yaml_path=str(yaml_path),
+            stage_env_url=test_stage_url,
         )
 
         # Verify proxy ConfigMap only contains asset paths
@@ -622,10 +672,30 @@ objects:
         proxy_configmap = yaml.safe_load(proxy_path.read_text())
         proxy_data = proxy_configmap["data"]["routes"]
 
-        # Verify asset paths ARE in the proxy config
+        # Verify asset paths ARE in the proxy config and route to localhost
         assert "handle /apps/rbac*" in proxy_data, "Should include /apps/rbac asset path"
         assert "handle /settings/rbac*" in proxy_data, "Should include /settings/rbac asset path"
-        assert "handle /iam*" in proxy_data, "Should include /iam module route"
+        assert "reverse_proxy 127.0.0.1:8000" in proxy_data, (
+            "Asset routes should proxy to localhost"
+        )
+
+        # Verify Chrome shell routes ARE in the proxy config and route to stage environment
+        assert "handle /iam*" in proxy_data, "Should include /iam Chrome shell route"
+        assert "handle /apps/chrome*" in proxy_data, "Should include /apps/chrome route"
+        assert "handle /*" in proxy_data or "handle / " in proxy_data, "Should include / route"
+        assert f"reverse_proxy {test_stage_url}" in proxy_data, (
+            "Chrome routes should proxy to stage env"
+        )
+
+        # CRITICAL: Verify no environment variable syntax is present (we use direct substitution)
+        assert "${HCC_ENV_URL}" not in proxy_data, (
+            "Generated config should not contain ${HCC_ENV_URL}. "
+            "Stage URL should be directly substituted from --stage-env-url argument."
+        )
+        assert "{env.HCC_ENV_URL}" not in proxy_data, (
+            "Generated config should not contain {env.HCC_ENV_URL}. "
+            "Stage URL should be directly substituted from --stage-env-url argument."
+        )
 
         # Verify navigation routes are NOT in the proxy config
         assert "handle /iam/user-access/users*" not in proxy_data, (
@@ -652,8 +722,8 @@ objects:
         os.chdir(original_dir)
 
 
-def test_validate_federated_module_config_rejects_try_files():
-    """Test that validation raises an error if a federated module config contains try_files."""
+def test_validate_app_config_rejects_try_files():
+    """Test that validation raises an error if app config contains try_files."""
     caddyfile_with_try_files = """
     :8000 {
         handle /apps/my-app* {
@@ -665,14 +735,32 @@ def test_validate_federated_module_config_rejects_try_files():
     }
     """
 
-    # Should raise ValueError for federated module with try_files
-    with pytest.raises(ValueError, match="Federated module configuration contains 'try_files'"):
-        validate_federated_module_config(caddyfile_with_try_files, is_federated=True)
+    # Should raise ValueError for any app config with try_files
+    with pytest.raises(ValueError, match="App configuration contains 'try_files'"):
+        validate_app_config(caddyfile_with_try_files)
 
 
-def test_validate_federated_module_config_allows_no_try_files():
-    """Test that validation passes if a federated module config has no try_files."""
-    caddyfile_without_try_files = """
+def test_validate_app_config_rejects_rewrite():
+    """Test that validation raises an error if app config contains rewrite."""
+    caddyfile_with_rewrite = """
+    :8000 {
+        handle /apps/my-app* {
+            rewrite / /index.html
+            file_server * {
+                root /srv/dist
+            }
+        }
+    }
+    """
+
+    # Should raise ValueError for any app config with rewrite
+    with pytest.raises(ValueError, match="App configuration contains 'rewrite'"):
+        validate_app_config(caddyfile_with_rewrite)
+
+
+def test_validate_app_config_allows_clean_config():
+    """Test that validation passes if app config has no routing directives."""
+    caddyfile_clean = """
     :8000 {
         handle /apps/my-app* {
             file_server * {
@@ -683,28 +771,11 @@ def test_validate_federated_module_config_allows_no_try_files():
     """
 
     # Should not raise any error
-    validate_federated_module_config(caddyfile_without_try_files, is_federated=True)
-
-
-def test_validate_standalone_app_allows_try_files():
-    """Test that validation passes for standalone apps with try_files."""
-    caddyfile_with_try_files = """
-    :8000 {
-        handle /apps/my-app* {
-            try_files {path} /index.html
-            file_server * {
-                root /srv/dist
-            }
-        }
-    }
-    """
-
-    # Should not raise any error for standalone apps
-    validate_federated_module_config(caddyfile_with_try_files, is_federated=False)
+    validate_app_config(caddyfile_clean)
 
 
 def test_federated_module_generates_config_without_try_files():
-    """Test that federated modules generate Caddy config without try_files directives."""
+    """Test that app ConfigMaps never contain try_files or rewrite directives."""
     test_app_name = "rbac"
     test_app_urls = ["/apps/rbac", "/settings/rbac"]
 
@@ -716,16 +787,17 @@ def test_federated_module_generates_config_without_try_files():
     )
 
     # Verify no try_files directives in the output
-    assert "try_files" not in caddyfile, (
-        "Federated module config should not contain 'try_files' directives"
-    )
+    assert "try_files" not in caddyfile, "App ConfigMap should not contain 'try_files' directives"
+
+    # Verify no rewrite directives in the output
+    assert "rewrite" not in caddyfile, "App ConfigMap should not contain 'rewrite' directives"
 
     # Verify file_server is still present (we still serve static files)
     assert "file_server" in caddyfile
 
 
-def test_standalone_app_generates_config_with_try_files():
-    """Test that standalone apps generate Caddy config with try_files directives."""
+def test_standalone_app_generates_config_without_routing_directives():
+    """Test that standalone apps also don't have try_files/rewrite (proxy handles routing)."""
     test_app_name = "my-standalone-app"
     test_app_urls = ["/apps/my-standalone-app"]
 
@@ -736,15 +808,18 @@ def test_standalone_app_generates_config_with_try_files():
         is_federated=False,
     )
 
-    # Verify try_files directives ARE present for standalone apps
-    assert "try_files" in caddyfile, "Standalone app config should contain 'try_files' directives"
+    # Verify no try_files directives (proxy handles routing)
+    assert "try_files" not in caddyfile, "App ConfigMap should not contain 'try_files' directives"
 
-    # Verify file_server is present
+    # Verify no rewrite directives (proxy handles routing)
+    assert "rewrite" not in caddyfile, "App ConfigMap should not contain 'rewrite' directives"
+
+    # Verify file_server is present (we still serve static files)
     assert "file_server" in caddyfile
 
 
-def test_federated_module_configmap_has_no_try_files():
-    """Integration test: Verify federated module ConfigMap has no try_files."""
+def test_federated_module_configmap_has_no_routing_directives():
+    """Integration test: Verify app ConfigMap has no try_files or rewrite directives."""
     test_app_name = "rbac"
     test_configmap_name = "rbac-federated-caddy"
     test_app_urls = ["/apps/rbac", "/settings/rbac"]
@@ -771,7 +846,12 @@ def test_federated_module_configmap_has_no_try_files():
 
         # Verify no try_files in the generated config
         assert "try_files" not in caddyfile_content, (
-            "Federated module ConfigMap should not contain 'try_files' directives"
+            "App ConfigMap should not contain 'try_files' directives"
+        )
+
+        # Verify no rewrite in the generated config
+        assert "rewrite" not in caddyfile_content, (
+            "App ConfigMap should not contain 'rewrite' directives"
         )
 
         # Verify routes are still present
