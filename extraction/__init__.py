@@ -79,10 +79,11 @@ def get_proxy_routes_from_frontend_yaml(
 
     This extracts ONLY the paths that should be proxied to the local app container:
     - spec.frontend.paths[] (e.g., /apps/rbac)
-    - spec.module.modules[].routes[].pathname (e.g., /settings/rbac)
+    - spec.module.modules[].routes[].pathname where path starts with /apps/ or /settings/
 
-    This does NOT include navigation routes (searchEntries, serviceTiles, bundleSegments)
-    because those should fall through to the Chrome shell in the stage environment.
+    This does NOT include:
+    - Chrome shell bundle routes (e.g., /iam from spec.module.modules[].routes[])
+    - Navigation routes (searchEntries, serviceTiles, bundleSegments)
 
     Args:
         yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
@@ -118,6 +119,7 @@ def get_proxy_routes_from_frontend_yaml(
                     paths.extend(frontend_paths)
 
                 # Extract from spec.module.modules[].routes[].pathname
+                # BUT only if they're asset paths (/apps/* or /settings/*)
                 modules = spec.get("module", {}).get("modules", [])
                 if isinstance(modules, list):
                     for module in modules:
@@ -125,8 +127,91 @@ def get_proxy_routes_from_frontend_yaml(
                         if isinstance(routes, list):
                             for route in routes:
                                 pathname = route.get("pathname")
-                                if pathname:
+                                if pathname and _is_asset_path(pathname):
                                     paths.append(pathname)
+
+    # Return unique paths, preserving order
+    seen = set()
+    unique_paths = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            unique_paths.append(path)
+
+    return unique_paths if unique_paths else None
+
+
+def _is_asset_path(pathname: str) -> bool:
+    """
+    Determine if a pathname is an asset path that should route to the local app container.
+
+    Asset paths are those that start with /apps/ or /settings/.
+    Other paths (like /iam, /insights, etc.) are Chrome shell bundle mounts.
+
+    Args:
+        pathname: The pathname to check
+
+    Returns:
+        True if the path is an asset path, False otherwise
+    """
+    return pathname.startswith("/apps/") or pathname.startswith("/settings/")
+
+
+def get_chrome_routes_from_frontend_yaml(
+    yaml_path: str = "deploy/frontend.yaml",
+) -> list[str] | None:
+    """
+    Extract Chrome shell routes from frontend.yaml file.
+
+    This extracts routes that should be proxied to the stage environment (Chrome shell):
+    - spec.module.modules[].routes[].pathname where path does NOT start with /apps/ or /settings/
+      (these are bundle mount points like /iam, /insights, etc.)
+
+    Standard Chrome routes (/apps/chrome, /, /index.html) should be added separately.
+
+    Args:
+        yaml_path: Path to the frontend.yaml file (default: "deploy/frontend.yaml")
+
+    Returns:
+        List of unique Chrome shell routes, or None if not found
+
+    Raises:
+        FileNotFoundError: If frontend.yaml is not found
+    """
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"frontend.yaml not found at: {yaml_path}")
+
+    # Read and parse the YAML file
+    with open(yaml_path) as f:
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Failed to parse YAML file: {e}")
+
+    paths = []
+
+    # Navigate to the Frontend spec
+    # The file is a Template with objects array
+    if "objects" in data and isinstance(data["objects"], list):
+        for obj in data["objects"]:
+            if obj.get("kind") == "Frontend":
+                spec = obj.get("spec", {})
+
+                # Extract from spec.module.modules[].routes[].pathname
+                # ONLY if they're Chrome shell bundle mounts (NOT /apps/* or /settings/*)
+                modules = spec.get("module", {}).get("modules", [])
+                if isinstance(modules, list):
+                    for module in modules:
+                        routes = module.get("routes", [])
+                        if isinstance(routes, list):
+                            for route in routes:
+                                pathname = route.get("pathname")
+                                if pathname and not _is_asset_path(pathname):
+                                    paths.append(pathname)
+
+    # Add standard Chrome shell routes
+    standard_chrome_routes = ["/apps/chrome", "/", "/index.html"]
+    paths.extend(standard_chrome_routes)
 
     # Return unique paths, preserving order
     seen = set()

@@ -101,8 +101,8 @@ def generate_app_caddyfile(
 
 
 def generate_proxy_routes_caddyfile(
-    app_url_value: list[str],
-    app_name: str,
+    asset_routes: list[str],
+    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
     template_path: str = "template/proxy_caddy.template.j2",
 ) -> str:
@@ -110,8 +110,8 @@ def generate_proxy_routes_caddyfile(
     Generate Caddyfile configuration snippets for proxy routes using a template.
 
     Args:
-        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
-        app_name: Name of the application
+        asset_routes: List of asset paths that route to local app (e.g., ["/apps/rbac", "/settings/rbac"])
+        chrome_routes: List of Chrome shell paths that route to stage env (e.g., ["/iam", "/apps/chrome"])
         app_port: Port for the application (default: "8000")
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 
@@ -124,11 +124,15 @@ def generate_proxy_routes_caddyfile(
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template(template_file)
 
-    # Render the template with app_url_value routes
+    # Default to empty list if no Chrome routes provided
+    if chrome_routes is None:
+        chrome_routes = []
+
+    # Render the template with both asset and Chrome routes
     rendered = template.render(
-        app_name=app_name,
+        asset_routes=asset_routes,
+        chrome_routes=chrome_routes,
         app_port=app_port,
-        route_prefixes=app_url_value,
     )
 
     return rendered
@@ -217,8 +221,8 @@ def generate_app_caddy_configmap(
 
 def generate_proxy_caddy_configmap(
     configmap_name: str,
-    app_url_value: list[str],
-    app_name: str,
+    asset_routes: list[str],
+    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
     namespace: str | None = None,
 ) -> str:
@@ -227,8 +231,8 @@ def generate_proxy_caddy_configmap(
 
     Args:
         configmap_name: Name for the ConfigMap
-        app_url_value: List of URL paths from appUrl
-        app_name: Name of the application
+        asset_routes: List of asset paths that route to local app
+        chrome_routes: List of Chrome shell paths that route to stage env
         app_port: Port for the application (default: "8000")
         namespace: Optional namespace for the ConfigMap
 
@@ -237,8 +241,8 @@ def generate_proxy_caddy_configmap(
     """
     # Generate the proxy routes Caddyfile
     proxy_caddyfile = generate_proxy_routes_caddyfile(
-        app_url_value=app_url_value,
-        app_name=app_name,
+        asset_routes=asset_routes,
+        chrome_routes=chrome_routes,
         app_port=app_port,
     )
 

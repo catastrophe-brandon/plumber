@@ -4,6 +4,7 @@ import json
 from extraction import (
     get_app_url_from_fec_config,
     get_app_url_from_frontend_yaml,
+    get_chrome_routes_from_frontend_yaml,
     get_module_name_from_frontend_yaml,
     get_proxy_routes_from_frontend_yaml,
     is_federated_module,
@@ -85,27 +86,38 @@ def run_plumber(
 
     # Extract proxy routes (asset paths only, not navigation routes)
     # For federated modules, proxy should only route /apps/* and /settings/* paths,
-    # NOT navigation routes like /iam/* which should fall through to Chrome shell
-    proxy_routes = None
+    # NOT navigation routes like /iam/* which should be routed to Chrome shell
+    asset_routes = None
     try:
-        proxy_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
-        if proxy_routes:
-            print(f"✓ Extracted proxy routes (asset paths only): {proxy_routes}")
-            if len(proxy_routes) < len(app_url_value):
-                excluded_count = len(app_url_value) - len(proxy_routes)
-                print(
-                    f"  Note: Excluded {excluded_count} navigation route(s) "
-                    f"that should fall through to Chrome shell"
-                )
+        asset_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
+        if asset_routes:
+            print(f"✓ Extracted asset routes (for local app): {asset_routes}")
     except (FileNotFoundError, ValueError):
         print(
-            f"Note: Could not extract proxy routes from {frontend_yaml_path}, using all app routes"
+            f"Note: Could not extract asset routes from {frontend_yaml_path}, using all app routes"
         )
 
-    # Fall back to app_url_value if proxy routes couldn't be extracted
-    if not proxy_routes:
-        proxy_routes = app_url_value
-        print(f"Using all app routes for proxy: {proxy_routes}")
+    # Fall back to app_url_value if asset routes couldn't be extracted
+    if not asset_routes:
+        asset_routes = app_url_value
+        print(f"Using all app routes as asset routes: {asset_routes}")
+
+    # Extract Chrome shell routes (bundle mounts and standard Chrome paths)
+    chrome_routes = None
+    try:
+        chrome_routes = get_chrome_routes_from_frontend_yaml(frontend_yaml_path)
+        if chrome_routes:
+            print(f"✓ Extracted Chrome shell routes (for stage env): {chrome_routes}")
+    except (FileNotFoundError, ValueError):
+        print(
+            f"Note: Could not extract Chrome routes from {frontend_yaml_path}, "
+            f"using default Chrome routes"
+        )
+
+    # Use default Chrome routes if extraction failed
+    if not chrome_routes:
+        chrome_routes = ["/apps/chrome", "/", "/index.html"]
+        print(f"Using default Chrome shell routes: {chrome_routes}")
 
     # Generate app Caddy ConfigMap
     app_configmap_path = generate_app_caddy_configmap(
@@ -118,11 +130,11 @@ def run_plumber(
     )
     print(f"\n✓ Generated app Caddy ConfigMap: {app_configmap_path}")
 
-    # Generate proxy Caddy ConfigMap (using proxy_routes, not app_url_value)
+    # Generate proxy Caddy ConfigMap (using asset_routes and chrome_routes)
     proxy_configmap_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
-        app_url_value=proxy_routes,  # Use proxy routes, not all routes
-        app_name=app_name,
+        asset_routes=asset_routes,
+        chrome_routes=chrome_routes,
         app_port=app_port,
         namespace=namespace,
     )
