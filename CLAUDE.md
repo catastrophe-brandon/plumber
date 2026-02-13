@@ -2,45 +2,34 @@
 
 This file contains important context about Plumber's behavior and design decisions for AI assistants.
 
-## Federated Modules vs Standalone Apps
+## Architecture: App Container + Proxy
 
-Plumber generates Caddy configuration files for two types of applications:
+Plumber generates two ConfigMaps that work together:
 
-### 1. Standalone Applications
-- Have their own `index.html` file
-- Use SPA (Single Page Application) routing
-- Caddy should use `try_files {path} /index.html` to handle client-side routing
-- Example: Traditional React apps that aren't federated
+### 1. App ConfigMap (port 8000)
+- Serves **static assets only** from `/srv/dist`
+- No routing logic - just file serving
+- Only handles asset paths extracted from frontend.yaml:
+  - `/apps/{module}*` - Module assets
+  - `/settings/{module}*` - Settings variant assets
+- **Does NOT contain:**
+  - `try_files` directives (proxy handles routing)
+  - `rewrite` directives (proxy handles routing)
+  - Catch-all handlers like `handle /` (proxy handles these)
 
-### 2. Federated Modules
-- Part of the Module Federation architecture
-- **Do NOT have index.html** - only serve `fed-mods.json` and JavaScript bundles
-- Loaded dynamically by the Chrome shell at runtime
-- Identified by `spec.module.manifestLocation` in `deploy/frontend.yaml`
+### 2. Proxy ConfigMap
+- Routes requests to appropriate destinations:
+  - **Asset routes** → `127.0.0.1:8000` (local app container)
+  - **Chrome shell routes** → Direct URL to stage environment
+- Uses direct URL substitution (no environment variables)
+- Handles all routing logic
 
-### Critical Difference: try_files Behavior
+### Why This Design?
 
-**Standalone apps:** Need `try_files {path} /index.html` because:
-- Browser requests `/my-app/some/route`
-- Caddy should serve `/index.html` if the file doesn't exist
-- index.html loads JavaScript which handles the route
-
-**Federated modules:** Must NOT use `try_files {path} /index.html` because:
-- There is no index.html to fall back to
-- Only actual files (fed-mods.json, *.js bundles) should be served
-- Requesting non-existent paths should return 404, not attempt to serve missing index.html
-- The Chrome shell (not Caddy) handles routing for federated modules
-
-### How Plumber Detects This
-
-1. `is_federated_module()` checks for `spec.module.manifestLocation` in frontend.yaml
-2. The `is_federated` flag is passed to the Jinja2 template
-3. Template conditionally includes `try_files` only when `is_federated` is False:
-   ```jinja2
-   {%- if not is_federated %}
-   try_files {path} /index.html
-   {%- endif %}
-   ```
+**The proxy handles ALL routing logic.** The app container on port 8000 only serves static files. This separation ensures:
+- App container is simple - no need for try_files or rewrite logic
+- Proxy controls which requests go to local vs stage environment
+- No catch-all routes in app container that could interfere with proxy routing
 
 ## Module Name Extraction
 
@@ -86,7 +75,7 @@ In the proxy ConfigMap template:
 {# Chrome shell routes - proxy to stage environment #}
 {% for route_path in chrome_routes %}
 handle {{ route_path }}* {
-    reverse_proxy ${HCC_ENV_URL}
+    reverse_proxy {{ stage_env_url }}
 }
 {%- endfor %}
 ```
@@ -96,26 +85,29 @@ This ensures that:
 2. Chrome shell can load and orchestrate federated modules
 3. Local app assets are still served from the local container
 
-### CRITICAL: Caddy Environment Variable Syntax
+### CRITICAL: Direct URL Substitution (No Environment Variables)
 
-**IMPORTANT:** Caddy uses `${VARIABLE_NAME}` syntax for environment variable substitution, NOT `{env.VARIABLE_NAME}`.
+**IMPORTANT:** Plumber uses **direct URL substitution** at generation time, NOT Caddy environment variables.
 
-**Correct:**
-```caddy
-reverse_proxy ${HCC_ENV_URL}
+**How it works:**
+```bash
+# User provides stage URL via CLI argument
+uv run python main.py rbac ... --stage-env-url https://console.stage.redhat.com
 ```
 
-**WRONG - DO NOT USE:**
+**Generated output:**
 ```caddy
-reverse_proxy {env.HCC_ENV_URL}  # ❌ This will NOT work in Caddy
+handle /iam* {
+    reverse_proxy https://console.stage.redhat.com
+}
 ```
-
-This is standard Caddy syntax and must be preserved in the `proxy_caddy.template.j2` template. The proxy sidecar container will substitute `${HCC_ENV_URL}` with the actual stage environment URL at runtime.
 
 **Why This Matters:**
-- Using incorrect syntax (`{env.HCC_ENV_URL}`) will cause Caddy to fail to resolve the environment variable
-- Chrome shell routes will not proxy correctly to the stage environment
-- Navigation and federated module loading will break
+- No reliance on Caddy's environment variable resolution
+- The URL is directly embedded in the ConfigMap at generation time
+- Eliminates all environment variable syntax issues
+- ConfigMaps are self-contained and ready to deploy
+- The `--stage-env-url` argument is **REQUIRED** when Chrome routes are present
 
 ### Extraction Function
 
