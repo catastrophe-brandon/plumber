@@ -108,7 +108,13 @@ def test_generate_proxy_caddy_configmap():
         # Verify Chrome routes go to stage environment
         assert "handle /iam*" in routes_content
         assert "handle /apps/chrome*" in routes_content
-        assert "reverse_proxy {env.HCC_ENV_URL}" in routes_content
+        assert "reverse_proxy ${HCC_ENV_URL}" in routes_content
+
+        # CRITICAL: Verify incorrect Caddy syntax is NOT present
+        assert "{env.HCC_ENV_URL}" not in routes_content, (
+            "Generated config contains incorrect Caddy syntax {env.HCC_ENV_URL}. "
+            "Must use ${HCC_ENV_URL} for environment variable substitution."
+        )
 
     finally:
         # Clean up
@@ -652,8 +658,14 @@ objects:
         assert "handle /iam*" in proxy_data, "Should include /iam Chrome shell route"
         assert "handle /apps/chrome*" in proxy_data, "Should include /apps/chrome route"
         assert "handle /*" in proxy_data or "handle / " in proxy_data, "Should include / route"
-        assert "reverse_proxy {env.HCC_ENV_URL}" in proxy_data, (
+        assert "reverse_proxy ${HCC_ENV_URL}" in proxy_data, (
             "Chrome routes should proxy to stage env"
+        )
+
+        # CRITICAL: Verify incorrect Caddy syntax is NOT present
+        assert "{env.HCC_ENV_URL}" not in proxy_data, (
+            "Generated config contains incorrect Caddy syntax {env.HCC_ENV_URL}. "
+            "Must use ${HCC_ENV_URL} for environment variable substitution."
         )
 
         # Verify navigation routes are NOT in the proxy config

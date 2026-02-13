@@ -27,9 +27,15 @@ def test_generate_proxy_routes_caddyfile():
         assert f"handle {route}*" in result
 
     # Verify Chrome routes go to stage environment
-    assert "reverse_proxy {env.HCC_ENV_URL}" in result
+    assert "reverse_proxy ${HCC_ENV_URL}" in result
     for route in chrome_routes:
         assert f"handle {route}*" in result
+
+    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    assert "{env.HCC_ENV_URL}" not in result, (
+        "Generated Caddyfile contains incorrect Caddy syntax {env.HCC_ENV_URL}. "
+        "Must use ${HCC_ENV_URL} for environment variable substitution."
+    )
 
     print("Generated Caddyfile:")
     print(result)
@@ -52,5 +58,11 @@ def test_generate_proxy_routes_caddyfile_custom_ports():
     assert "handle /settings/my-app*" in result
 
     # Verify Chrome routes go to stage environment
-    assert "reverse_proxy {env.HCC_ENV_URL}" in result
+    assert "reverse_proxy ${HCC_ENV_URL}" in result
     assert "handle /iam*" in result
+
+    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    assert "{env.HCC_ENV_URL}" not in result, (
+        "Generated Caddyfile contains incorrect Caddy syntax {env.HCC_ENV_URL}. "
+        "Must use ${HCC_ENV_URL} for environment variable substitution."
+    )

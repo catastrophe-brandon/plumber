@@ -86,7 +86,7 @@ In the proxy ConfigMap template:
 {# Chrome shell routes - proxy to stage environment #}
 {% for route_path in chrome_routes %}
 handle {{ route_path }}* {
-    reverse_proxy {env.HCC_ENV_URL}
+    reverse_proxy ${HCC_ENV_URL}
 }
 {%- endfor %}
 ```
@@ -95,6 +95,27 @@ This ensures that:
 1. Navigation to bundle routes (e.g., `/iam/my-user-access`) goes to Chrome shell
 2. Chrome shell can load and orchestrate federated modules
 3. Local app assets are still served from the local container
+
+### CRITICAL: Caddy Environment Variable Syntax
+
+**IMPORTANT:** Caddy uses `${VARIABLE_NAME}` syntax for environment variable substitution, NOT `{env.VARIABLE_NAME}`.
+
+**Correct:**
+```caddy
+reverse_proxy ${HCC_ENV_URL}
+```
+
+**WRONG - DO NOT USE:**
+```caddy
+reverse_proxy {env.HCC_ENV_URL}  # ❌ This will NOT work in Caddy
+```
+
+This is standard Caddy syntax and must be preserved in the `proxy_caddy.template.j2` template. The proxy sidecar container will substitute `${HCC_ENV_URL}` with the actual stage environment URL at runtime.
+
+**Why This Matters:**
+- Using incorrect syntax (`{env.HCC_ENV_URL}`) will cause Caddy to fail to resolve the environment variable
+- Chrome shell routes will not proxy correctly to the stage environment
+- Navigation and federated module loading will break
 
 ### Extraction Function
 
@@ -157,7 +178,7 @@ Routes for Chrome shell bundle mounts that should be proxied to the stage enviro
 - `spec.module.modules[].routes[].pathname` where pathname does NOT start with `/apps/` or `/settings/` (e.g., `/iam`, `/insights`)
 - Standard Chrome paths: `/apps/chrome`, `/`, `/index.html`
 
-These are extracted by `get_chrome_routes_from_frontend_yaml()` and used in the **proxy ConfigMap** to route to `{env.HCC_ENV_URL}`.
+These are extracted by `get_chrome_routes_from_frontend_yaml()` and used in the **proxy ConfigMap** to route to `${HCC_ENV_URL}`.
 
 ### 3. Navigation Routes (Not Proxied)
 Routes that are menu/navigation links - these are NOT included in the proxy ConfigMap:
@@ -185,7 +206,7 @@ These are included in the **app ConfigMap** (for reference) but excluded from th
 
 **For Chrome shell bundle routes** (e.g., `/iam`):
 1. Browser requests `/iam/my-user-access`
-2. Proxy matches Chrome route handler (`/iam*`) → routes to `{env.HCC_ENV_URL}` (stage environment)
+2. Proxy matches Chrome route handler (`/iam*`) → routes to `${HCC_ENV_URL}` (stage environment)
 3. Stage environment's Chrome shell serves the HTML page with navigation
 4. Chrome shell discovers federated module at `/apps/rbac/fed-mods.json`
 5. Browser requests `/apps/rbac/fed-mods.json` → routed to local app (step above)
@@ -261,7 +282,19 @@ Note: app_name is primarily used for the /default* route and ConfigMap naming. A
 2. **Chrome shell routes** (`get_chrome_routes_from_frontend_yaml()`) - Bundle mounts like `/iam`, `/insights`, plus standard Chrome paths that route to stage environment
 3. **Navigation routes** - Not included in proxy ConfigMap, handled by Chrome shell routes via pattern matching
 
-The proxy ConfigMap now explicitly routes Chrome shell paths to `{env.HCC_ENV_URL}`, ensuring proper Chrome shell functionality.
+The proxy ConfigMap now explicitly routes Chrome shell paths to `${HCC_ENV_URL}`, ensuring proper Chrome shell functionality.
+
+### Issue: Chrome shell routes not working / environment variable not resolving
+**Cause:** Template uses incorrect Caddy environment variable syntax `{env.HCC_ENV_URL}` instead of `${HCC_ENV_URL}`
+
+**Symptoms:**
+- Chrome shell navigation fails
+- Routes to `/iam/*`, `/apps/chrome/*` don't load
+- Caddy cannot resolve the stage environment URL
+
+**Fix:** ✅ Fixed - Template now uses correct Caddy syntax `${HCC_ENV_URL}`
+
+**CRITICAL:** The proxy ConfigMap template (`template/proxy_caddy.template.j2`) must use `${HCC_ENV_URL}` for environment variable substitution. This is standard Caddy syntax. Do NOT change this to `{env.HCC_ENV_URL}` as that will break environment variable resolution.
 
 ## Validation
 

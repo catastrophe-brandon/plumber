@@ -110,8 +110,10 @@ def generate_proxy_routes_caddyfile(
     Generate Caddyfile configuration snippets for proxy routes using a template.
 
     Args:
-        asset_routes: List of asset paths that route to local app (e.g., ["/apps/rbac", "/settings/rbac"])
-        chrome_routes: List of Chrome shell paths that route to stage env (e.g., ["/iam", "/apps/chrome"])
+        asset_routes: List of asset paths that route to local app
+            (e.g., ["/apps/rbac", "/settings/rbac"])
+        chrome_routes: List of Chrome shell paths that route to stage env
+            (e.g., ["/iam", "/apps/chrome"])
         app_port: Port for the application (default: "8000")
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 

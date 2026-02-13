@@ -45,10 +45,16 @@ def test_proxy_caddy_template_rendering():
         assert expected_route in rendered, f"Asset route '{route_path}' not found in output"
 
     # Verify Chrome routes proxy to stage environment
-    assert "reverse_proxy {env.HCC_ENV_URL}" in rendered, "Stage env proxy not found"
+    assert "reverse_proxy ${HCC_ENV_URL}" in rendered, "Stage env proxy not found"
     for route_path in test_vars["chrome_routes"]:
         expected_route = f"handle {route_path}*"
         assert expected_route in rendered, f"Chrome route '{route_path}' not found in output"
+
+    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    assert "{env.HCC_ENV_URL}" not in rendered, (
+        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
+        "Must use ${HCC_ENV_URL} for environment variable substitution."
+    )
 
     print("Rendered Caddyfile:")
     print(rendered)
@@ -80,7 +86,13 @@ def test_proxy_caddy_template_with_different_app():
     # Verify Chrome routes are present
     assert "handle /iam*" in rendered
     assert "handle /apps/chrome*" in rendered
-    assert "reverse_proxy {env.HCC_ENV_URL}" in rendered
+    assert "reverse_proxy ${HCC_ENV_URL}" in rendered
+
+    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    assert "{env.HCC_ENV_URL}" not in rendered, (
+        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
+        "Must use ${HCC_ENV_URL} for environment variable substitution."
+    )
 
     # Verify routes not in the list are not present
     assert "handle /ansible/my-custom-app*" not in rendered
@@ -111,4 +123,10 @@ def test_proxy_caddy_template_route_count():
     expected_count = 5
     assert handle_count == expected_count, (
         f"Expected {expected_count} handle directives, found {handle_count}"
+    )
+
+    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    assert "{env.HCC_ENV_URL}" not in rendered, (
+        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
+        "Must use ${HCC_ENV_URL} for environment variable substitution."
     )
