@@ -8,6 +8,6 @@ handle {{ route_path }}* {
 {# Chrome shell routes - proxy to stage environment #}
 {% for route_path in chrome_routes %}
 handle {{ route_path }}* {
-    reverse_proxy ${HCC_ENV_URL}
+    reverse_proxy {{ stage_env_url }}
 }
 {%- endfor %}

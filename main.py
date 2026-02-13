@@ -20,6 +20,7 @@ def run_plumber(
     fec_config_path: str = "fec.config.js",
     frontend_yaml_path: str = "deploy/frontend.yaml",
     namespace: str | None = None,
+    stage_env_url: str | None = None,
 ):
     print("Hello from plumber!")
     print(f"App Name (from CLI): {app_name}")
@@ -119,10 +120,10 @@ def run_plumber(
         chrome_routes = ["/apps/chrome", "/", "/index.html"]
         print(f"Using default Chrome shell routes: {chrome_routes}")
 
-    # Generate app Caddy ConfigMap
+    # Generate app Caddy ConfigMap (using asset_routes, not all routes)
     app_configmap_path = generate_app_caddy_configmap(
         configmap_name=app_configmap_name,
-        app_url_value=app_url_value,
+        app_url_value=asset_routes,  # Use asset routes, not all routes
         app_name=app_name,
         app_port=app_port,
         namespace=namespace,
@@ -137,6 +138,7 @@ def run_plumber(
         chrome_routes=chrome_routes,
         app_port=app_port,
         namespace=namespace,
+        stage_env_url=stage_env_url,
     )
     print(f"✓ Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
 
@@ -182,6 +184,13 @@ def main():
         help="Optional Kubernetes namespace for the ConfigMaps",
     )
 
+    parser.add_argument(
+        "--stage-env-url",
+        type=str,
+        default=None,
+        help="Stage environment URL for Chrome shell routes (e.g., https://stage.foo.redhat.com)",
+    )
+
     args = parser.parse_args()
 
     run_plumber(
@@ -192,6 +201,7 @@ def main():
         args.fec_config,
         args.frontend_yaml,
         args.namespace,
+        args.stage_env_url,
     )
 
 

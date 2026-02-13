@@ -20,9 +20,6 @@
 
     handle @env_match {
         uri strip_prefix /default
-        {%- if not is_federated %}
-        try_files {path} /index.html
-        {%- endif %}
         file_server * {
             root /srv/dist
             browse
@@ -37,9 +34,6 @@
     }
     handle @{{ route_name }}_match {
         uri strip_prefix {{ app_url }}
-        {%- if not is_federated %}
-        rewrite / /index.html
-        {%- endif %}
         file_server * {
             root /srv/dist
         }
@@ -50,9 +44,6 @@
     }
     handle @{{ route_name }}_subpath {
         uri strip_prefix {{ app_url }}
-        {%- if not is_federated %}
-        try_files {path} /index.html
-        {%- endif %}
         file_server * {
             root /srv/dist
         }

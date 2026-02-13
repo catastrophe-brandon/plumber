@@ -11,6 +11,7 @@ def test_proxy_caddy_template_rendering():
     template = env.get_template("proxy_caddy.template.j2")
 
     # Test values - separate asset and Chrome routes
+    test_stage_url = "https://stage.foo.redhat.com"
     test_vars = {
         "app_port": "8000",
         "asset_routes": [
@@ -26,6 +27,7 @@ def test_proxy_caddy_template_rendering():
             "/apps/chrome",
             "/",
         ],
+        "stage_env_url": test_stage_url,
     }
 
     # Render the template
@@ -44,16 +46,20 @@ def test_proxy_caddy_template_rendering():
         expected_route = f"handle {route_path}*"
         assert expected_route in rendered, f"Asset route '{route_path}' not found in output"
 
-    # Verify Chrome routes proxy to stage environment
-    assert "reverse_proxy ${HCC_ENV_URL}" in rendered, "Stage env proxy not found"
+    # Verify Chrome routes proxy to stage environment (direct URL, not env var)
+    assert f"reverse_proxy {test_stage_url}" in rendered, "Stage env proxy not found"
     for route_path in test_vars["chrome_routes"]:
         expected_route = f"handle {route_path}*"
         assert expected_route in rendered, f"Chrome route '{route_path}' not found in output"
 
-    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    # CRITICAL: Verify no environment variable syntax is present (we use direct substitution)
+    assert "${HCC_ENV_URL}" not in rendered, (
+        "Generated config should not contain ${HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
+    )
     assert "{env.HCC_ENV_URL}" not in rendered, (
-        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
-        "Must use ${HCC_ENV_URL} for environment variable substitution."
+        "Generated config should not contain {env.HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
     )
 
     print("Rendered Caddyfile:")
@@ -67,10 +73,12 @@ def test_proxy_caddy_template_with_different_app():
     template = env.get_template("proxy_caddy.template.j2")
 
     # Different test values - separate asset and Chrome routes
+    test_stage_url = "https://custom-stage.example.com"
     test_vars = {
         "app_port": "3000",
         "asset_routes": ["/apps/my-custom-app", "/settings/my-custom-app"],
         "chrome_routes": ["/iam", "/apps/chrome"],
+        "stage_env_url": test_stage_url,
     }
 
     rendered = template.render(test_vars)
@@ -83,15 +91,19 @@ def test_proxy_caddy_template_with_different_app():
     assert "handle /settings/my-custom-app*" in rendered
     assert "reverse_proxy 127.0.0.1:3000" in rendered
 
-    # Verify Chrome routes are present
+    # Verify Chrome routes are present (direct URL, not env var)
     assert "handle /iam*" in rendered
     assert "handle /apps/chrome*" in rendered
-    assert "reverse_proxy ${HCC_ENV_URL}" in rendered
+    assert f"reverse_proxy {test_stage_url}" in rendered
 
-    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    # CRITICAL: Verify no environment variable syntax is present (we use direct substitution)
+    assert "${HCC_ENV_URL}" not in rendered, (
+        "Generated config should not contain ${HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
+    )
     assert "{env.HCC_ENV_URL}" not in rendered, (
-        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
-        "Must use ${HCC_ENV_URL} for environment variable substitution."
+        "Generated config should not contain {env.HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
     )
 
     # Verify routes not in the list are not present
@@ -105,10 +117,12 @@ def test_proxy_caddy_template_route_count():
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("proxy_caddy.template.j2")
 
+    test_stage_url = "https://test-stage.example.com"
     test_vars = {
         "app_port": "8000",
         "asset_routes": ["/apps/test-app", "/settings/test-app"],
         "chrome_routes": ["/iam", "/apps/chrome", "/"],
+        "stage_env_url": test_stage_url,
     }
 
     rendered = template.render(test_vars)
@@ -125,8 +139,12 @@ def test_proxy_caddy_template_route_count():
         f"Expected {expected_count} handle directives, found {handle_count}"
     )
 
-    # CRITICAL: Verify incorrect Caddy syntax is NOT present
+    # CRITICAL: Verify no environment variable syntax is present (we use direct substitution)
+    assert "${HCC_ENV_URL}" not in rendered, (
+        "Generated config should not contain ${HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
+    )
     assert "{env.HCC_ENV_URL}" not in rendered, (
-        "Template rendered with incorrect Caddy syntax {env.HCC_ENV_URL}. "
-        "Must use ${HCC_ENV_URL} for environment variable substitution."
+        "Generated config should not contain {env.HCC_ENV_URL}. "
+        "Stage URL should be directly substituted from --stage-env-url argument."
     )
