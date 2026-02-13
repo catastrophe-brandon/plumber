@@ -44,13 +44,13 @@ Plumber generates Caddy configuration files for two types of applications:
 
 ## Module Name Extraction
 
-Plumber now automatically extracts the module name from `spec.frontend.name` in frontend.yaml.
+Plumber automatically extracts the module name from `metadata.name` in frontend.yaml.
 
 ### Why This Matters
 
 Repository names often differ from module names:
 - Repository: `insights-rbac-ui`
-- Module name: `rbac` (from spec.frontend.name)
+- Module name: `rbac` (from metadata.name in Frontend object)
 
 Using the wrong name causes mismatched routes:
 - Wrong: `/apps/insights-rbac-ui*` (using repo name)
@@ -58,54 +58,154 @@ Using the wrong name causes mismatched routes:
 
 ### How It Works
 
-1. `get_module_name_from_frontend_yaml()` extracts `spec.frontend.name`
+1. `get_module_name_from_frontend_yaml()` extracts `metadata.name` from the Frontend object
 2. This overrides the CLI `app_name` argument if found
 3. Prevents mismatches when repo name differs from module name
 
+## Chrome Shell Routes
+
+Plumber automatically extracts and routes Chrome shell bundle mounts to the stage environment. This ensures that federated modules integrate correctly with the Chrome shell's navigation and bundle loading system.
+
+### What Are Chrome Shell Routes?
+
+Chrome shell routes are bundle mount points defined in `spec.module.modules[].routes[].pathname` that DO NOT start with `/apps/` or `/settings/`. These typically include:
+- `/iam` - Identity and Access Management bundle
+- `/insights` - Insights bundle
+- `/settings` - Settings bundle (when not serving local assets)
+- `/subscriptions` - Subscriptions bundle
+
+Additionally, standard Chrome shell paths are always included:
+- `/apps/chrome` - Chrome shell itself
+- `/` - Root path
+- `/index.html` - Main entry point
+
+### How Chrome Shell Routes Work
+
+In the proxy ConfigMap template:
+```jinja2
+{# Chrome shell routes - proxy to stage environment #}
+{% for route_path in chrome_routes %}
+handle {{ route_path }}* {
+    reverse_proxy {env.HCC_ENV_URL}
+}
+{%- endfor %}
+```
+
+This ensures that:
+1. Navigation to bundle routes (e.g., `/iam/my-user-access`) goes to Chrome shell
+2. Chrome shell can load and orchestrate federated modules
+3. Local app assets are still served from the local container
+
+### Extraction Function
+
+`get_chrome_routes_from_frontend_yaml()` automatically:
+1. Parses `spec.module.modules[].routes[].pathname` from frontend.yaml
+2. Filters for routes that are NOT asset paths (using `_is_asset_path()`)
+3. Adds standard Chrome shell paths (`/apps/chrome`, `/`, `/index.html`)
+4. Returns unique list of Chrome shell routes
+
+## Asset Path Detection
+
+The `_is_asset_path()` helper function is critical for distinguishing between asset paths and Chrome shell bundle routes.
+
+### Detection Logic
+
+```python
+def _is_asset_path(pathname: str) -> bool:
+    """
+    Determine if a pathname is an asset path that should route to the local app container.
+
+    Asset paths are those that start with /apps/ or /settings/.
+    Other paths (like /iam, /insights, etc.) are Chrome shell bundle mounts.
+    """
+    return pathname.startswith("/apps/") or pathname.startswith("/settings/")
+```
+
+### Examples
+
+**Asset Paths** (route to local app on port 8000):
+- `/apps/rbac`
+- `/apps/insights-rbac-ui`
+- `/settings/rbac`
+- `/settings/my-app/config`
+
+**Chrome Shell Bundle Routes** (route to stage environment):
+- `/iam`
+- `/insights`
+- `/subscriptions`
+- `/openshift`
+
+This distinction is used by:
+- `get_proxy_routes_from_frontend_yaml()` - Only returns asset paths
+- `get_chrome_routes_from_frontend_yaml()` - Only returns non-asset paths
+
 ## Proxy Routes vs Navigation Routes
 
-Plumber distinguishes between two types of routes in frontend.yaml:
+Plumber distinguishes between three types of routes in frontend.yaml:
 
-### 1. Proxy Routes (Asset Paths)
+### 1. Asset Routes (Proxy to Local App)
 Routes that serve the actual application code and should be proxied to the local container (port 8000):
 - `spec.frontend.paths[]` - e.g., `/apps/rbac`
-- `spec.module.modules[].routes[].pathname` - e.g., `/settings/rbac`
+- `spec.module.modules[].routes[].pathname` where pathname starts with `/apps/` or `/settings/`
 
-These are extracted by `get_proxy_routes_from_frontend_yaml()` and used in the **proxy ConfigMap**.
+These are extracted by `get_proxy_routes_from_frontend_yaml()` and used in the **proxy ConfigMap** to route to `127.0.0.1:8000`.
 
-### 2. Navigation Routes
-Routes that are menu/navigation links served by the Chrome shell and should fall through to the stage environment:
+**Detection:** The helper function `_is_asset_path()` identifies asset paths by checking if they start with `/apps/` or `/settings/`.
+
+### 2. Chrome Shell Bundle Routes (Proxy to Stage Environment)
+Routes for Chrome shell bundle mounts that should be proxied to the stage environment:
+- `spec.module.modules[].routes[].pathname` where pathname does NOT start with `/apps/` or `/settings/` (e.g., `/iam`, `/insights`)
+- Standard Chrome paths: `/apps/chrome`, `/`, `/index.html`
+
+These are extracted by `get_chrome_routes_from_frontend_yaml()` and used in the **proxy ConfigMap** to route to `{env.HCC_ENV_URL}`.
+
+### 3. Navigation Routes (Not Proxied)
+Routes that are menu/navigation links - these are NOT included in the proxy ConfigMap:
 - `spec.searchEntries[].href` - e.g., `/iam/user-access/users`
 - `spec.serviceTiles[].href` - e.g., `/iam/user-access/groups`
 - `spec.bundleSegments[].navItems[].href` - e.g., `/iam/my-user-access`
 - `spec.bundleSegments[].navItems[].routes[].href` - e.g., `/iam/access-management/roles`
 
-These are included in the **app ConfigMap** (for reference) but excluded from the **proxy ConfigMap**.
+These are included in the **app ConfigMap** (for reference) but excluded from the **proxy ConfigMap**. They fall through to the catch-all handler which routes to the stage environment.
 
 ### Why This Matters
 
-**Problem:** If navigation routes are proxied to port 8000:
-1. Browser requests `/iam/my-user-access`
+**Problem (Before Fix):** If all routes are proxied to port 8000:
+1. Browser requests `/iam/my-user-access` (navigation route)
 2. Proxy sends it to port 8000 (app container)
 3. Port 8000 serves static files from `/srv/dist` - no HTML exists for this navigation route
 4. Browser gets empty `<html><head></head><body></body></html>`
 
-**Solution:** Only proxy asset paths to port 8000:
+**Solution (Current Implementation):** Separate asset paths, Chrome shell routes, and navigation routes:
+
+**For asset paths** (e.g., `/apps/rbac/fed-mods.json`):
+1. Browser requests `/apps/rbac/fed-mods.json`
+2. Proxy matches asset route handler → routes to `127.0.0.1:8000`
+3. Local app container serves the federated module manifest
+
+**For Chrome shell bundle routes** (e.g., `/iam`):
 1. Browser requests `/iam/my-user-access`
-2. Proxy doesn't match any handler, falls through to catch-all
-3. Catch-all sends it to stage environment
-4. Stage environment's Chrome shell serves the HTML page with navigation
-5. Chrome shell discovers federated module at `/apps/rbac/fed-mods.json`
-6. Proxy routes `/apps/rbac/*` to port 8000 for the module assets
+2. Proxy matches Chrome route handler (`/iam*`) → routes to `{env.HCC_ENV_URL}` (stage environment)
+3. Stage environment's Chrome shell serves the HTML page with navigation
+4. Chrome shell discovers federated module at `/apps/rbac/fed-mods.json`
+5. Browser requests `/apps/rbac/fed-mods.json` → routed to local app (step above)
+
+**For navigation routes** (e.g., `/iam/user-access/users`):
+1. Browser requests `/iam/user-access/users`
+2. Proxy matches Chrome route handler (`/iam*`) → routes to stage environment
+3. Chrome shell serves the appropriate page
 
 ### Implementation
 
 ```python
-# Extract all routes (for app ConfigMap)
+# Extract all routes (for app ConfigMap - includes all navigation routes)
 app_url_value = get_app_url_from_frontend_yaml(frontend_yaml_path)
 
-# Extract only proxy routes (for proxy ConfigMap)
-proxy_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
+# Extract asset routes (for proxy ConfigMap - /apps/*, /settings/*)
+asset_routes = get_proxy_routes_from_frontend_yaml(frontend_yaml_path)
+
+# Extract Chrome shell routes (for proxy ConfigMap - /iam, /apps/chrome, etc.)
+chrome_routes = get_chrome_routes_from_frontend_yaml(frontend_yaml_path)
 ```
 
 ## ConfigMap Generation Process
@@ -126,13 +226,18 @@ graph TD
 
 ## Template Variables
 
-The `app_caddy.template.j2` template receives:
+### App ConfigMap Template (`app_caddy.template.j2`)
 - `app_name`: Module name (from metadata.name in frontend.yaml or CLI fallback)
-- `app_urls`: List of routes (from spec.frontend.paths + module routes)
+- `app_urls`: List of all routes (from spec.frontend.paths + module routes + navigation routes)
 - `is_federated`: Boolean flag indicating federated module
+- `app_port`: Port number for the app container (default: "8000")
 
-Note: app_name is primarily used for the /default* route and ConfigMap naming. All actual
-application routes come from app_urls (extracted from frontend.yaml), not hardcoded app_name patterns.
+Note: app_name is primarily used for the /default* route and ConfigMap naming. All actual application routes come from app_urls (extracted from frontend.yaml), not hardcoded app_name patterns.
+
+### Proxy ConfigMap Template (`proxy_caddy.template.j2`)
+- `asset_routes`: List of asset paths to route to local app (e.g., `/apps/rbac`, `/settings/rbac`)
+- `chrome_routes`: List of Chrome shell paths to route to stage environment (e.g., `/iam`, `/apps/chrome`)
+- `app_port`: Port number for the app container (default: "8000")
 
 ## Common Issues
 
@@ -149,8 +254,14 @@ application routes come from app_urls (extracted from frontend.yaml), not hardco
 **Status:** ✅ Fixed - Removed hardcoded route since dynamic routes from frontend.yaml already cover it.
 
 ### Issue: Navigation routes (like /iam/*) return empty HTML
-**Cause:** Proxy ConfigMap routes ALL paths (including navigation routes) to port 8000, but port 8000 only serves static assets, not Chrome shell pages
-**Fix:** ✅ Fixed - Plumber now uses `get_proxy_routes_from_frontend_yaml()` to only proxy asset paths (`spec.frontend.paths` and `spec.module.modules[].routes[]`), not navigation routes (`spec.searchEntries`, `spec.serviceTiles`, `spec.bundleSegments`). Navigation routes fall through to the Chrome shell in the stage environment.
+**Cause:** Proxy ConfigMap routes ALL paths (including navigation and Chrome shell routes) to port 8000, but port 8000 only serves static assets, not Chrome shell pages
+
+**Fix:** ✅ Fixed - Plumber now separates routes into three categories:
+1. **Asset routes** (`get_proxy_routes_from_frontend_yaml()`) - `/apps/*` and `/settings/*` paths that route to local app on port 8000
+2. **Chrome shell routes** (`get_chrome_routes_from_frontend_yaml()`) - Bundle mounts like `/iam`, `/insights`, plus standard Chrome paths that route to stage environment
+3. **Navigation routes** - Not included in proxy ConfigMap, handled by Chrome shell routes via pattern matching
+
+The proxy ConfigMap now explicitly routes Chrome shell paths to `{env.HCC_ENV_URL}`, ensuring proper Chrome shell functionality.
 
 ## Validation
 
@@ -201,19 +312,48 @@ After modifying Plumber:
 ```
 plumber/
 ├── extraction/
-│   └── __init__.py          # is_federated_module(), get_module_name_from_frontend_yaml()
+│   └── __init__.py                    # Route extraction and detection functions:
+│                                       # - get_app_url_from_frontend_yaml()
+│                                       # - get_proxy_routes_from_frontend_yaml()
+│                                       # - get_chrome_routes_from_frontend_yaml()
+│                                       # - get_app_url_from_fec_config()
+│                                       # - is_federated_module()
+│                                       # - get_module_name_from_frontend_yaml()
+│                                       # - _is_asset_path()
+│                                       # - _extract_nav_item_hrefs()
 ├── generation/
-│   └── __init__.py          # generate_app_caddyfile(), generate_app_caddy_configmap()
+│   └── __init__.py                    # ConfigMap generation functions:
+│                                       # - generate_app_caddyfile()
+│                                       # - generate_proxy_routes_caddyfile()
+│                                       # - generate_app_caddy_configmap()
+│                                       # - generate_proxy_caddy_configmap()
+│                                       # - generate_configmap()
+│                                       # - validate_yaml_file()
+│                                       # - validate_federated_module_config()
 ├── template/
-│   ├── app_caddy.template.j2     # Conditional try_files based on is_federated
-│   └── proxy_caddy.template.j2   # Proxy routing (no try_files logic needed)
-├── main.py                  # Orchestrates detection and generation
-└── CLAUDE.md               # This file
+│   ├── app_caddy.template.j2          # App server config (conditional try_files based on is_federated)
+│   └── proxy_caddy.template.j2        # Proxy routing (asset_routes + chrome_routes)
+├── tests/                             # Test suite
+│   ├── test_configmap_generation.py
+│   ├── test_generate_frontend_proxy_caddyfile.py
+│   └── test_proxy_caddy_template.py
+├── main.py                            # CLI orchestration and main entry point
+└── CLAUDE.md                          # This file
 ```
+
+## Recent Improvements (Completed)
+
+1. ✅ **Removed hardcoded /apps/{{ app_name }}* route** - All routes now extracted dynamically from frontend.yaml
+2. ✅ **Chrome shell route separation** - Chrome shell bundle routes now explicitly routed to stage environment
+3. ✅ **Asset path detection** - `_is_asset_path()` helper distinguishes `/apps/*` and `/settings/*` from bundle mounts
+4. ✅ **Module name extraction from metadata.name** - Correctly extracts module name from Frontend object
+5. ✅ **Validation for federated modules** - Ensures federated modules don't have try_files directives
+6. ✅ **Tests added** - Test suite includes configmap generation and proxy routing tests
 
 ## Future Improvements
 
-1. **Remove hardcoded /apps/{{ app_name }}* route** - Dynamic routes from frontend.yaml already cover this
-2. **Add tests** - Unit tests for is_federated_module() and get_module_name_from_frontend_yaml()
-3. **Better error handling** - Gracefully handle malformed frontend.yaml files
-4. **Chrome shell integration** - Consider how ConfigMaps interact with Chrome shell expectations
+1. **Enhanced error handling** - More graceful handling of malformed or incomplete frontend.yaml files
+2. **Dry-run mode** - Preview generated configs without writing files
+3. **Config validation** - Validate generated Caddyfile syntax using Caddy itself
+4. **Route conflict detection** - Warn if routes overlap or conflict
+5. **Documentation generation** - Auto-generate route documentation from ConfigMaps
