@@ -639,8 +639,10 @@ objects:
     assert chrome_routes is not None, "Should extract Chrome shell routes"
     assert "/iam" in chrome_routes, "Should include Chrome shell bundle mounts"
     assert "/apps/chrome" in chrome_routes, "Should include standard Chrome route"
-    assert "/" in chrome_routes, "Should include root route"
-    assert "/index.html" in chrome_routes, "Should include index.html route"
+    # Note: / and /index.html are NOT included as explicit routes
+    # They are handled by the main Caddyfile's final catch-all handler
+    assert "/" not in chrome_routes, "Should NOT include catch-all root route"
+    assert "/index.html" not in chrome_routes, "Should NOT include catch-all index.html route"
 
     # Now verify the proxy ConfigMap only contains asset paths
     original_dir = os.getcwd()
@@ -682,7 +684,9 @@ objects:
         # Verify Chrome shell routes ARE in the proxy config and route to stage environment
         assert "handle /iam*" in proxy_data, "Should include /iam Chrome shell route"
         assert "handle /apps/chrome*" in proxy_data, "Should include /apps/chrome route"
-        assert "handle /*" in proxy_data or "handle / " in proxy_data, "Should include / route"
+        # Verify catch-all routes are NOT included (they're handled by main Caddyfile)
+        assert "handle /*" not in proxy_data, "Should NOT include catch-all /* route"
+        assert "handle /index.html*" not in proxy_data, "Should NOT include /index.html route"
         assert f"reverse_proxy {test_stage_url}" in proxy_data, (
             "Chrome routes should proxy to stage env"
         )

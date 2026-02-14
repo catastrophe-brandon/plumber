@@ -210,7 +210,10 @@ def get_chrome_routes_from_frontend_yaml(
                                     paths.append(pathname)
 
     # Add standard Chrome shell routes
-    standard_chrome_routes = ["/apps/chrome", "/", "/index.html"]
+    # Note: Only /apps/chrome is added as an explicit route.
+    # Root path (/) and /index.html are handled by the main Caddyfile's final catch-all,
+    # not in the proxy routes snippets.
+    standard_chrome_routes = ["/apps/chrome"]
     paths.extend(standard_chrome_routes)
 
     # Return unique paths, preserving order

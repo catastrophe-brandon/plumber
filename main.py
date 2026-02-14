@@ -116,8 +116,10 @@ def run_plumber(
         )
 
     # Use default Chrome routes if extraction failed
+    # Note: Only /apps/chrome is included as an explicit route.
+    # Root path (/) and /index.html are handled by the main Caddyfile's final catch-all.
     if not chrome_routes:
-        chrome_routes = ["/apps/chrome", "/", "/index.html"]
+        chrome_routes = ["/apps/chrome"]
         print(f"Using default Chrome shell routes: {chrome_routes}")
 
     # Generate app Caddy ConfigMap (using asset_routes, not all routes)
