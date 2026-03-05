@@ -36,76 +36,6 @@ def validate_yaml_file(file_path: str) -> None:
         print("   Install with: pip install yamllint", file=sys.stderr)
 
 
-def validate_app_config(caddyfile_content: str) -> None:
-    """
-    Validate that app configurations don't contain routing directives.
-
-    App containers only serve static files. The proxy handles all routing logic,
-    so app configs should not contain try_files or rewrite directives.
-
-    Args:
-        caddyfile_content: The generated Caddyfile configuration
-
-    Raises:
-        ValueError: If config contains try_files or rewrite directives
-    """
-    if "try_files" in caddyfile_content:
-        raise ValueError(
-            "❌ Validation failed: App configuration contains 'try_files' directive.\n"
-            "   The proxy handles routing. App container only serves static files.\n"
-            "   This indicates a bug in the template generation logic."
-        )
-
-    if "rewrite" in caddyfile_content:
-        raise ValueError(
-            "❌ Validation failed: App configuration contains 'rewrite' directive.\n"
-            "   The proxy handles routing. App container only serves static files.\n"
-            "   This indicates a bug in the template generation logic."
-        )
-
-
-def generate_app_caddyfile(
-    app_url_value: list[str],
-    app_name: str,
-    app_port: str = "8000",
-    is_federated: bool = False,
-    template_path: str = "template/app_caddy.template.j2",
-) -> str:
-    """
-    Generate a Caddyfile configuration for the application server using a Jinja2 template.
-
-    This creates Caddy route handlers that serve the static application files
-    from /srv/dist for each route in appUrl.
-
-    Args:
-        app_url_value: List of URL paths from appUrl (e.g., ["/settings/my-app", "/apps/my-app"])
-        app_name: Name of the application
-        app_port: Port for the application (default: "8000")
-        is_federated: Whether this is a federated module (default: False)
-        template_path: Path to the Jinja2 template (default: "template/app_caddy.template.j2")
-
-    Returns:
-        Rendered Caddyfile configuration as a string
-    """
-    # Set up Jinja2 environment
-    template_dir = os.path.dirname(template_path)
-    template_file = os.path.basename(template_path)
-    env = Environment(loader=FileSystemLoader(template_dir))
-    template = env.get_template(template_file)
-
-    # Render the template with the exact app URLs from fec.config.js
-    rendered = template.render(
-        app_name=app_name,
-        app_urls=app_url_value,
-        is_federated=is_federated,
-    )
-
-    # Validate that app config doesn't have routing directives
-    validate_app_config(rendered)
-
-    return rendered
-
-
 def generate_proxy_routes_caddyfile(
     asset_routes: list[str],
     chrome_routes: list[str] | None = None,
@@ -196,52 +126,6 @@ data:
 {indented_content}
 """
     return configmap
-
-
-def generate_app_caddy_configmap(
-    configmap_name: str,
-    app_url_value: list[str],
-    app_name: str,
-    app_port: str = "8000",
-    namespace: str | None = None,
-    is_federated: bool = False,
-) -> str:
-    """
-    Generate app Caddyfile and wrap it in a ConfigMap YAML.
-
-    Args:
-        configmap_name: Name for the ConfigMap
-        app_url_value: List of URL paths from appUrl
-        app_name: Name of the application
-        app_port: Port for the application (default: "8000")
-        namespace: Optional namespace for the ConfigMap
-        is_federated: Whether this is a federated module (default: False)
-
-    Returns:
-        Path to the generated ConfigMap YAML file
-    """
-    # Generate the app Caddyfile
-    app_caddyfile = generate_app_caddyfile(
-        app_url_value=app_url_value,
-        app_name=app_name,
-        app_port=app_port,
-        is_federated=is_federated,
-    )
-
-    # Wrap in ConfigMap
-    configmap_yaml = generate_configmap(configmap_name, app_caddyfile, namespace=namespace)
-
-    # Write to file
-    output_filename = f"{configmap_name}.yaml"
-    output_path = os.path.join(os.getcwd(), output_filename)
-
-    with open(output_path, "w") as f:
-        f.write(configmap_yaml)
-
-    # Validate the generated YAML
-    validate_yaml_file(output_path)
-
-    return output_path
 
 
 def generate_proxy_caddy_configmap(

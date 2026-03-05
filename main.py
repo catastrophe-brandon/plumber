@@ -9,13 +9,12 @@ from extraction import (
     get_proxy_routes_from_frontend_yaml,
     is_federated_module,
 )
-from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
+from generation import generate_proxy_caddy_configmap
 
 
 def run_plumber(
     app_name: str,
     repo_url: str,
-    app_configmap_name: str,
     proxy_configmap_name: str,
     fec_config_path: str = "fec.config.js",
     frontend_yaml_path: str = "deploy/frontend.yaml",
@@ -25,7 +24,6 @@ def run_plumber(
     print("Hello from plumber!")
     print(f"App Name (from CLI): {app_name}")
     print(f"Repo URL: {repo_url}")
-    print(f"App ConfigMap Name: {app_configmap_name}")
     print(f"Proxy ConfigMap Name: {proxy_configmap_name}")
     if namespace:
         print(f"Namespace: {namespace}")
@@ -120,17 +118,6 @@ def run_plumber(
         chrome_routes = ["/apps/chrome", "/", "/index.html"]
         print(f"Using default Chrome shell routes: {chrome_routes}")
 
-    # Generate app Caddy ConfigMap (using asset_routes, not all routes)
-    app_configmap_path = generate_app_caddy_configmap(
-        configmap_name=app_configmap_name,
-        app_url_value=asset_routes,  # Use asset routes, not all routes
-        app_name=app_name,
-        app_port=app_port,
-        namespace=namespace,
-        is_federated=is_federated,
-    )
-    print(f"\n✓ Generated app Caddy ConfigMap: {app_configmap_path}")
-
     # Generate proxy Caddy ConfigMap (using asset_routes and chrome_routes)
     proxy_configmap_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
@@ -150,12 +137,6 @@ def main():
     parser.add_argument("app_name", type=str, help="Name of the application")
     parser.add_argument("repo_url", type=str, help="Git URL of the repository")
 
-    parser.add_argument(
-        "--app-configmap-name",
-        type=str,
-        required=True,
-        help="Name for the app Caddy ConfigMap",
-    )
     parser.add_argument(
         "--proxy-configmap-name",
         type=str,
@@ -196,7 +177,6 @@ def main():
     run_plumber(
         args.app_name,
         args.repo_url,
-        args.app_configmap_name,
         args.proxy_configmap_name,
         args.fec_config,
         args.frontend_yaml,

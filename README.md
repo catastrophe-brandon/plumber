@@ -1,10 +1,10 @@
 # plumber
 
-Hackathon tool - Automatically generate Kubernetes ConfigMaps with Caddy configurations for frontend application testing.
+Hackathon tool - Automatically generate a Kubernetes ConfigMap with Caddy proxy route configurations for frontend application testing.
 
 ## Overview
 
-Plumber automates the process of generating Kubernetes ConfigMap YAML files containing Caddyfile configurations for frontend applications. It reads your application's configuration files (`frontend.yaml` or `fec.config.js`), extracts route configurations, and generates ConfigMaps ready to be used in any testing environment (Tekton, Kubernetes, Minikube, etc.).
+Plumber automates the process of generating a Kubernetes ConfigMap YAML file containing Caddyfile proxy route configurations for frontend applications. It reads your application's configuration files (`frontend.yaml` or `fec.config.js`), extracts route configurations, and generates a proxy ConfigMap ready to be used in any testing environment (Tekton, Kubernetes, Minikube, etc.).
 
 ## Intended Use Case: Federated Modules
 
@@ -28,28 +28,28 @@ Federated modules are micro-frontend components that:
 
 ## Critical Guidelines
 
-### 🚫 DO NOT Manually Edit Generated ConfigMaps
+### 🚫 DO NOT Manually Edit Generated ConfigMap
 
-**NEVER manually edit or craft ConfigMaps when troubleshooting issues.** This is a critical anti-pattern that leads to:
+**NEVER manually edit or craft the ConfigMap when troubleshooting issues.** This is a critical anti-pattern that leads to:
 - Configuration drift between generated and deployed configs
 - Difficult-to-debug routing issues
-- Lost changes when ConfigMaps are regenerated
+- Lost changes when the ConfigMap is regenerated
 - Inconsistent behavior across environments
 
 **Instead, when troubleshooting:**
 1. Fix the source configuration (`frontend.yaml` or `fec.config.js`)
-2. Re-run Plumber to regenerate ConfigMaps
+2. Re-run Plumber to regenerate the ConfigMap
 3. Review the new output for correctness
-4. Submit the regenerated ConfigMaps
+4. Submit the regenerated ConfigMap
 
-### ✅ Always Validate Generated ConfigMaps
+### ✅ Always Validate Generated ConfigMap
 
-After generating ConfigMaps, **use Claude Code or Claude to review the ConfigMap content** for potential issues:
+After generating the ConfigMap, **use Claude Code or Claude to review the ConfigMap content** for potential issues:
 
 **Recommended Validation Workflow:**
 ```bash
-# After running Plumber, ask Claude to review the generated ConfigMaps:
-# "Please review the generated ConfigMaps and check for errant navigation paths"
+# After running Plumber, ask Claude to review the generated ConfigMap:
+# "Please review the generated ConfigMap and check for errant navigation paths"
 ```
 
 **Claude will check for:**
@@ -97,24 +97,17 @@ data:
 ## Features
 
 ### ConfigMap Generation
-- Generate Kubernetes ConfigMap YAML files with embedded Caddyfile configurations
-- Two separate ConfigMaps: one for the application server, one for the frontend proxy
-- User-specified ConfigMap names for flexibility
+- Generate a Kubernetes ConfigMap YAML file with embedded Caddyfile proxy route configurations
+- User-specified ConfigMap name for flexibility
 - Automatic YAML validation using yamllint after generation
-  - Validates all generated ConfigMaps
+  - Validates the generated ConfigMap
   - Fails the generation process if validation fails
   - Ensures files pass pipeline linters (no trailing spaces, valid syntax)
 
 ### Caddyfile Generation
-- **App Caddyfile**: Uses Jinja2 template to generate Caddy server configuration for serving your application's static files
-  - Template-based configuration with TLS and metrics support
-  - Route matchers for exact paths and subpaths
-  - URI stripping and index.html rewriting
-  - Serves files from `/srv/dist`
 - **Proxy Routes Caddyfile**: Generates reverse proxy route snippets for the frontend development proxy
-  - Routes Chrome resources to port 9912
   - Routes application resources to port 8000
-  - Handles multiple route prefixes
+  - Handles multiple route prefixes extracted from configuration files
 
 ### Configuration Extraction
 - **Frontend YAML Support**: Parse `frontend.yaml` (or `frontend.yml`) to extract paths from:
@@ -144,7 +137,6 @@ Once installed, you can use the `plumber` command from anywhere:
 
 ```bash
 plumber <app_name> <repo_url> \
-  --app-configmap-name <name> \
   --proxy-configmap-name <name> \
   [--frontend-yaml <path>] \
   [--fec-config <path>] \
@@ -154,11 +146,10 @@ plumber <app_name> <repo_url> \
 **Arguments:**
 - `app_name`: Name of the application (e.g., "learning-resources")
 - `repo_url`: Git URL of the repository (e.g., "https://github.com/user/repo.git")
-- `--app-configmap-name`: (Required) Name for the app Caddy ConfigMap
-- `--proxy-configmap-name`: (Required) Name for the proxy routes Caddy ConfigMap
+- `--proxy-configmap-name`: (Required) Name for the proxy routes ConfigMap
 - `--frontend-yaml`: (Optional) Path to frontend.yaml file (default: "deploy/frontend.yaml")
 - `--fec-config`: (Optional) Path to fec.config.js file (default: "fec.config.js")
-- `--namespace`: (Optional) Kubernetes namespace for the ConfigMaps
+- `--namespace`: (Optional) Kubernetes namespace for the ConfigMap
 
 **Note:** Plumber checks `--frontend-yaml` first, then falls back to `--fec-config` if frontend.yaml is not found or doesn't contain paths.
 
@@ -166,7 +157,6 @@ plumber <app_name> <repo_url> \
 ```bash
 plumber learning-resources \
   https://github.com/RedHatInsights/learning-resources.git \
-  --app-configmap-name learning-resources-app-caddy \
   --proxy-configmap-name learning-resources-proxy-caddy \
   --fec-config fec_configs/fec.config.js \
   --namespace hcc-platex-services-tenant
@@ -177,16 +167,14 @@ plumber learning-resources \
 Hello from plumber!
 App Name: learning-resources
 Repo URL: https://github.com/RedHatInsights/learning-resources.git
-App ConfigMap Name: learning-resources-app-caddy
 Proxy ConfigMap Name: learning-resources-proxy-caddy
 Namespace: hcc-platex-services-tenant
 Found appUrl in fec_configs/fec.config.js: ['/settings/learning-resources', '/openshift/learning-resources', ...]
 
-Generated app Caddy ConfigMap: /Users/you/learning-resources-app-caddy.yaml
 Generated proxy Caddy ConfigMap: /Users/you/learning-resources-proxy-caddy.yaml
 ```
 
-The generated ConfigMap files will be created in your current directory and are ready to be applied to any Kubernetes cluster.
+The generated ConfigMap file will be created in your current directory and is ready to be applied to any Kubernetes cluster.
 
 ### Python API
 
@@ -194,17 +182,10 @@ The generated ConfigMap files will be created in your current directory and are 
 
 ```python
 from extraction import get_app_url_from_fec_config
-from generation import generate_app_caddy_configmap, generate_proxy_caddy_configmap
+from generation import generate_proxy_caddy_configmap
 
 # Get app URLs from fec.config.js
 app_urls = get_app_url_from_fec_config("path/to/fec.config.js")
-
-# Generate app Caddy ConfigMap
-app_configmap_path = generate_app_caddy_configmap(
-    configmap_name="my-app-caddy",
-    app_url_value=app_urls,
-    app_name="my-app",
-)
 
 # Generate proxy Caddy ConfigMap
 proxy_configmap_path = generate_proxy_caddy_configmap(
@@ -213,7 +194,6 @@ proxy_configmap_path = generate_proxy_caddy_configmap(
     app_name="my-app",
 )
 
-print(f"Generated: {app_configmap_path}")
 print(f"Generated: {proxy_configmap_path}")
 ```
 
@@ -244,25 +224,6 @@ app_urls = get_app_url_from_fec_config("path/to/fec.config.js")
 # Supports both string and array formats for appUrl
 ```
 
-#### Generate App Caddyfile
-
-```python
-from generation import generate_app_caddyfile
-
-app_urls = [
-    "/settings/learning-resources",
-    "/openshift/learning-resources",
-    "/learning-resources",
-]
-
-# Uses app_caddy.template.j2 to generate Caddyfile
-caddyfile_config = generate_app_caddyfile(
-    app_url_value=app_urls,
-    app_name="learning-resources",
-)
-print(caddyfile_config)
-```
-
 #### Generate Proxy Routes Caddyfile
 
 ```python
@@ -278,27 +239,12 @@ app_urls = [
 caddyfile_config = generate_proxy_routes_caddyfile(
     app_url_value=app_urls,
     app_name="learning-resources",
-    app_port="8000",
-    chrome_port="9912"
+    app_port="8000"
 )
 print(caddyfile_config)
 ```
 
 ## Generated ConfigMap Structure
-
-### App ConfigMap Structure
-
-```yaml
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: <user-specified-name>
-  namespace: <optional-namespace>
-data:
-  Caddyfile: |
-    <caddy configuration content>
-```
 
 ### Proxy ConfigMap Structure
 
@@ -314,51 +260,7 @@ data:
     <caddy routes configuration>
 ```
 
-**Key Differences:**
-- **App ConfigMap** uses `Caddyfile` as the data key
-- **Proxy ConfigMap** uses `routes` as the data key (matching production deployment patterns)
-- Both support optional namespace in metadata
-
-### Example App ConfigMap
-
-```yaml
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: learning-resources-app-caddy
-  namespace: hcc-platex-services-tenant
-data:
-  Caddyfile: |
-    # Caddyfile config for the application undergoing testing (This is NOT JSON)
-    {
-      	auto_https disable_redirects
-      	servers {
-      		metrics
-      	}
-    }
-
-    :9000 {
-      	metrics /metrics
-    }
-
-    :8000 {
-      	log
-
-      	# Handle main app route
-      	@app_match {
-      		path /apps/learning-resources*
-      	}
-      	handle @app_match {
-      		uri strip_prefix /apps/learning-resources
-      		file_server * {
-      			root /srv/dist
-      			browse
-      		}
-      	}
-        ...
-    }
-```
+**Note:** The proxy ConfigMap uses `routes` as the data key and supports an optional namespace in metadata.
 
 ### Example Proxy ConfigMap
 
@@ -394,33 +296,25 @@ data:
     ...
 ```
 
-**Note:** The proxy ConfigMap uses `routes` as the data key instead of `Caddyfile` to match production deployment patterns. All application routes from `appUrl` are proxied to port 8000 (the app container), while Chrome/shell resources are proxied to port 9912.
+**Note:** The proxy ConfigMap uses `routes` as the data key. All application routes from `appUrl` are proxied to port 8000 (the app container).
 
-## Using the ConfigMaps
+## Using the ConfigMap
 
-Apply the generated ConfigMaps to your Kubernetes cluster:
+Apply the generated ConfigMap to your Kubernetes cluster:
 
 ```bash
-kubectl apply -f learning-resources-app-caddy.yaml
 kubectl apply -f learning-resources-proxy-caddy.yaml
 ```
 
-Mount them in your pods:
+Mount it in your proxy pod:
 
 ```yaml
 volumes:
-  - name: app-caddy-config
-    configMap:
-      name: learning-resources-app-caddy
   - name: proxy-caddy-config
     configMap:
       name: learning-resources-proxy-caddy
 
 containers:
-  - name: app
-    volumeMounts:
-      - name: app-caddy-config
-        mountPath: /etc/caddy
   - name: proxy
     volumeMounts:
       - name: proxy-caddy-config
@@ -429,24 +323,11 @@ containers:
 
 ## Templates
 
-### App Caddy Template (`template/app_caddy.template.j2`)
-
-Jinja2 template for generating the application sidecar Caddyfile with variables:
-- `app_name`: Application name
-- `app_urls`: List of exact application URL paths (e.g., `["/settings/my-app", "/staging/my-app", "/apps/my-app"]`)
-
-Generates a complete Caddyfile with:
-- Global TLS and metrics configuration
-- Metrics server on port 9000
-- Application server on port 8000
-- Route handlers for each exact URL path from configuration files
-
 ### Proxy Caddy Template (`template/proxy_caddy.template.j2`)
 
 Jinja2 template for generating frontend proxy Caddyfile with variables:
 - `app_name`: Application name
 - `app_port`: Port for application resources (default: 8000)
-- `chrome_port`: Port for Chrome/shell resources (default: 9912)
 - `route_prefixes`: List of exact route paths to proxy to the application
 
 ## Testing
@@ -513,7 +394,6 @@ plumber/
 ├── generation/
 │   └── __init__.py                      # Caddyfile and ConfigMap generation functions
 ├── template/
-│   ├── app_caddy.template.j2            # App Caddyfile Jinja2 template
 │   └── proxy_caddy.template.j2          # Proxy Caddyfile Jinja2 template
 ├── scripts/
 │   └── generate_configmaps.sh           # Example script for generating ConfigMaps
@@ -533,7 +413,7 @@ plumber/
 - Python >= 3.12
 - jinja2 >= 3.0.0
 - gitpython >= 3.1.0
-- yamllint >= 1.35.0 (for YAML validation of generated ConfigMaps)
+- yamllint >= 1.35.0 (for YAML validation of generated ConfigMap)
 - pyyaml >= 6.0.0 (for YAML validation in tests)
 
 ## Development
@@ -570,22 +450,18 @@ git commit --no-verify
 1. **Read Configuration**: Plumber first checks for `frontend.yaml`, then falls back to `fec.config.js` to extract application paths
    - **frontend.yaml**: Extracts from `spec.frontend.paths[]` and `spec.module.modules[].routes[].pathname`
    - **fec.config.js**: Extracts the `appUrl` value (supports both string and array formats)
-2. **Generate App Caddyfile**: Uses the `app_caddy.template.j2` Jinja2 template to create a complete Caddy server configuration
-   - Creates route handlers for each exact URL path from the configuration
-   - Handles path stripping, index.html rewriting, and static file serving
-3. **Generate Proxy Routes**: Uses the `proxy_caddy.template.j2` Jinja2 template to create reverse_proxy directives for the frontend proxy
+2. **Generate Proxy Routes**: Uses the `proxy_caddy.template.j2` Jinja2 template to create reverse_proxy directives for the frontend proxy
    - Routes all application paths to port 8000 (the test app container)
-   - Routes Chrome/shell resources to port 9912
-4. **Wrap in ConfigMaps**: Both Caddyfile configurations are wrapped in Kubernetes ConfigMap YAML structures
-5. **Validate YAML**: Each generated ConfigMap is automatically validated using yamllint
+3. **Wrap in ConfigMap**: The Caddyfile configuration is wrapped in a Kubernetes ConfigMap YAML structure
+4. **Validate YAML**: The generated ConfigMap is automatically validated using yamllint
    - Uses relaxed validation rules
    - Fails immediately if validation errors are found (trailing spaces, syntax errors, etc.)
    - Ensures generated files will pass pipeline linters
-6. **Output**: Two complete, validated ConfigMap YAML files are written to the current directory
+5. **Output**: A complete, validated ConfigMap YAML file is written to the current directory
 
 ## Benefits
 
-- **Reusable**: ConfigMaps can be used with any pipeline system (Tekton, GitHub Actions, Jenkins, etc.)
+- **Reusable**: The ConfigMap can be used with any pipeline system (Tekton, GitHub Actions, Jenkins, etc.)
 - **Flexible**: User-specified ConfigMap names for easy integration
 - **Portable**: Works with Kubernetes, Minikube, OpenShift, and other Kubernetes-compatible platforms
 - **Maintainable**: Template-based generation makes it easy to update configurations

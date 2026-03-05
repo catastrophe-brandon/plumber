@@ -1,73 +1,9 @@
 import os
 import tempfile
 
-import pytest
 import yaml
 
-from generation import (
-    generate_app_caddy_configmap,
-    generate_app_caddyfile,
-    generate_proxy_caddy_configmap,
-    validate_app_config,
-)
-
-
-def test_generate_app_caddy_configmap():
-    """Test that app Caddy ConfigMap is generated correctly."""
-    test_app_name = "test-app"
-    test_configmap_name = "test-app-caddy"
-    test_app_urls = ["/settings/test-app", "/apps/test-app", "/test-app"]
-
-    # Generate the ConfigMap
-    output_path = generate_app_caddy_configmap(
-        configmap_name=test_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-    )
-
-    try:
-        # Verify the output file exists
-        assert os.path.exists(output_path), f"Output file not created at {output_path}"
-
-        # Read and parse the YAML
-        with open(output_path) as f:
-            configmap_content = f.read()
-
-        # Parse YAML
-        configmap = yaml.safe_load(configmap_content)
-
-        # Verify ConfigMap structure
-        assert configmap is not None, "ConfigMap parsed to None"
-        assert configmap.get("apiVersion") == "v1", "Invalid apiVersion"
-        assert configmap.get("kind") == "ConfigMap", "Invalid kind"
-
-        # Verify metadata
-        metadata = configmap.get("metadata", {})
-        assert metadata.get("name") == test_configmap_name, "Invalid ConfigMap name"
-
-        # Verify data section
-        data = configmap.get("data", {})
-        assert "Caddyfile" in data, "Caddyfile key not found in data"
-
-        caddyfile_content = data["Caddyfile"]
-        assert "# Caddyfile config for the application" in caddyfile_content
-        assert f"/apps/{test_app_name}" in caddyfile_content
-        assert "settings" in caddyfile_content  # Route prefix
-
-        # CRITICAL: Verify no try_files or rewrite directives (proxy handles routing)
-        assert "try_files" not in caddyfile_content, (
-            "App ConfigMap should not contain try_files directives. "
-            "The proxy handles all routing, app container only serves static files."
-        )
-        assert "rewrite" not in caddyfile_content, (
-            "App ConfigMap should not contain rewrite directives. "
-            "The proxy handles all routing, app container only serves static files."
-        )
-
-    finally:
-        # Clean up
-        if os.path.exists(output_path):
-            os.remove(output_path)
+from generation import generate_proxy_caddy_configmap
 
 
 def test_generate_proxy_caddy_configmap():
@@ -140,19 +76,10 @@ def test_generate_proxy_caddy_configmap():
 
 def test_configmap_names_are_respected():
     """Test that ConfigMap names are correctly set."""
-    test_app_name = "my-app"
-    app_configmap_name = "custom-app-config"
     proxy_configmap_name = "custom-proxy-config"
-    test_app_urls = ["/my-app"]
     test_asset_routes = ["/apps/my-app"]
 
-    # Generate both ConfigMaps
-    app_path = generate_app_caddy_configmap(
-        configmap_name=app_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-    )
-
+    # Generate proxy ConfigMap
     proxy_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
         asset_routes=test_asset_routes,
@@ -160,31 +87,22 @@ def test_configmap_names_are_respected():
     )
 
     try:
-        # Verify file names match
-        assert app_path.endswith(f"{app_configmap_name}.yaml")
+        # Verify file name matches
         assert proxy_path.endswith(f"{proxy_configmap_name}.yaml")
 
-        # Verify ConfigMap metadata names
-        with open(app_path) as f:
-            app_configmap = yaml.safe_load(f)
-        assert app_configmap["metadata"]["name"] == app_configmap_name
-
+        # Verify ConfigMap metadata name
         with open(proxy_path) as f:
             proxy_configmap = yaml.safe_load(f)
         assert proxy_configmap["metadata"]["name"] == proxy_configmap_name
 
     finally:
         # Clean up
-        if os.path.exists(app_path):
-            os.remove(app_path)
         if os.path.exists(proxy_path):
             os.remove(proxy_path)
 
 
 def test_configmap_integration_with_fec_config():
-    """Integration test that generates ConfigMaps using fec.config.js."""
-    test_app_name = "test-app"
-
+    """Integration test that generates ConfigMap using fec.config.js."""
     # Create a test fec.config.js file
     test_fec_content = """const path = require('path');
 
@@ -206,7 +124,6 @@ module.exports = {
         fec_config_path = temp_fec.name
 
     try:
-        app_configmap_name = "integration-app-caddy"
         proxy_configmap_name = "integration-proxy-caddy"
 
         # Import the function that uses fec config
@@ -217,39 +134,24 @@ module.exports = {
         assert app_urls is not None, "Failed to parse fec.config.js"
         assert len(app_urls) == 3, f"Expected 3 URLs, got {len(app_urls)}"
 
-        # Generate ConfigMaps
-        app_path = generate_app_caddy_configmap(
-            configmap_name=app_configmap_name,
-            app_url_value=app_urls,
-            app_name=test_app_name,
-        )
-
+        # Generate proxy ConfigMap
         proxy_path = generate_proxy_caddy_configmap(
             configmap_name=proxy_configmap_name,
             asset_routes=app_urls,
             chrome_routes=[],  # No Chrome routes for this test
         )
 
-        # Verify both ConfigMaps
-        with open(app_path) as f:
-            app_configmap = yaml.safe_load(f)
-        assert app_configmap is not None
-        assert app_configmap["kind"] == "ConfigMap"
-
+        # Verify proxy ConfigMap
         with open(proxy_path) as f:
             proxy_configmap = yaml.safe_load(f)
         assert proxy_configmap is not None
         assert proxy_configmap["kind"] == "ConfigMap"
 
-        # Verify fec config URLs made it into the configs
-        app_data = app_configmap["data"]["Caddyfile"]
+        # Verify fec config URLs made it into the config
         proxy_data = proxy_configmap["data"]["routes"]  # Proxy uses "routes" key
-
-        assert "settings" in app_data  # Route prefix from /settings/test-app
         assert "handle /settings/test-app*" in proxy_data
 
         # Clean up
-        os.remove(app_path)
         os.remove(proxy_path)
 
     finally:
@@ -259,21 +161,12 @@ module.exports = {
 
 
 def test_configmap_with_namespace():
-    """Test that namespace is correctly added to ConfigMaps."""
-    test_app_name = "namespace-test-app"
-    app_configmap_name = "namespace-app-caddy"
+    """Test that namespace is correctly added to ConfigMap."""
     proxy_configmap_name = "namespace-proxy-caddy"
     test_namespace = "hcc-platex-services-tenant"
     test_app_urls = ["/namespace-test-app"]
 
-    # Generate both ConfigMaps with namespace
-    app_path = generate_app_caddy_configmap(
-        configmap_name=app_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-        namespace=test_namespace,
-    )
-
+    # Generate proxy ConfigMap with namespace
     proxy_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
         asset_routes=test_app_urls,
@@ -282,12 +175,6 @@ def test_configmap_with_namespace():
     )
 
     try:
-        # Verify app ConfigMap has namespace
-        with open(app_path) as f:
-            app_configmap = yaml.safe_load(f)
-        assert app_configmap["metadata"]["name"] == app_configmap_name
-        assert app_configmap["metadata"]["namespace"] == test_namespace
-
         # Verify proxy ConfigMap has namespace
         with open(proxy_path) as f:
             proxy_configmap = yaml.safe_load(f)
@@ -299,8 +186,6 @@ def test_configmap_with_namespace():
 
     finally:
         # Clean up
-        if os.path.exists(app_path):
-            os.remove(app_path)
         if os.path.exists(proxy_path):
             os.remove(proxy_path)
 
@@ -340,24 +225,15 @@ def test_fallback_from_frontend_yaml_to_fec_config(tmp_path):
         run_plumber(
             app_name=test_app_name,
             repo_url="https://github.com/test/repo",
-            app_configmap_name="fallback-app-caddy",
             proxy_configmap_name="fallback-proxy-caddy",
             fec_config_path=str(fec_config_path),
             frontend_yaml_path=nonexistent_yaml,
             stage_env_url="https://stage.foo.redhat.com",
         )
 
-        # Verify the generated ConfigMaps use fec.config.js values
-        app_path = tmp_path / "fallback-app-caddy.yaml"
+        # Verify the generated ConfigMap uses fec.config.js values
         proxy_path = tmp_path / "fallback-proxy-caddy.yaml"
-
-        assert app_path.exists(), "App ConfigMap should be generated"
         assert proxy_path.exists(), "Proxy ConfigMap should be generated"
-
-        # Parse and verify app ConfigMap contains routes from fec.config.js
-        app_configmap = yaml.safe_load(app_path.read_text())
-        app_data = app_configmap["data"]["Caddyfile"]
-        assert "fallback-app" in app_data
 
         # Parse and verify proxy ConfigMap contains routes from fec.config.js
         proxy_configmap = yaml.safe_load(proxy_path.read_text())
@@ -395,24 +271,15 @@ def test_fallback_to_default_when_both_missing(tmp_path):
         run_plumber(
             app_name=test_app_name,
             repo_url="https://github.com/test/repo",
-            app_configmap_name="default-app-caddy",
             proxy_configmap_name="default-proxy-caddy",
             fec_config_path=nonexistent_fec,
             frontend_yaml_path=nonexistent_yaml,
             stage_env_url="https://stage.foo.redhat.com",
         )
 
-        # Verify the generated ConfigMaps use default routes
-        app_path = tmp_path / "default-app-caddy.yaml"
+        # Verify the generated ConfigMap uses default routes
         proxy_path = tmp_path / "default-proxy-caddy.yaml"
-
-        assert app_path.exists(), "App ConfigMap should be generated"
         assert proxy_path.exists(), "Proxy ConfigMap should be generated"
-
-        # Parse and verify app ConfigMap contains default route
-        app_configmap = yaml.safe_load(app_path.read_text())
-        app_data = app_configmap["data"]["Caddyfile"]
-        assert test_app_name in app_data
 
         # Parse and verify proxy ConfigMap contains default route
         proxy_configmap = yaml.safe_load(proxy_path.read_text())
@@ -476,14 +343,13 @@ objects:
         run_plumber(
             app_name=test_app_name,
             repo_url="https://github.com/test/repo",
-            app_configmap_name="precedence-app-caddy",
             proxy_configmap_name="precedence-proxy-caddy",
             fec_config_path=str(fec_path),
             frontend_yaml_path=str(yaml_path),
             stage_env_url="https://stage.foo.redhat.com",
         )
 
-        # Verify the generated ConfigMaps use frontend.yaml values (not fec.config.js)
+        # Verify the generated ConfigMap uses frontend.yaml values (not fec.config.js)
         proxy_path = tmp_path / "precedence-proxy-caddy.yaml"
 
         assert proxy_path.exists(), "Proxy ConfigMap should be generated"
@@ -576,7 +442,7 @@ objects:
     # Import the extraction functions
     from extraction import get_app_url_from_frontend_yaml, get_proxy_routes_from_frontend_yaml
 
-    # Extract all paths (for app ConfigMap)
+    # Extract all paths (for reference)
     all_paths = get_app_url_from_frontend_yaml(str(yaml_path))
 
     # Verify all expected paths are extracted
@@ -654,11 +520,10 @@ objects:
 
         test_stage_url = "https://stage.foo.redhat.com"
 
-        # Generate ConfigMaps
+        # Generate ConfigMap
         run_plumber(
             app_name=test_app_name,
             repo_url="https://github.com/test/repo",
-            app_configmap_name="rbac-app-caddy",
             proxy_configmap_name="rbac-proxy-caddy",
             fec_config_path="nonexistent.js",
             frontend_yaml_path=str(yaml_path),
@@ -720,145 +585,3 @@ objects:
     finally:
         # Restore original directory
         os.chdir(original_dir)
-
-
-def test_validate_app_config_rejects_try_files():
-    """Test that validation raises an error if app config contains try_files."""
-    caddyfile_with_try_files = """
-    :8000 {
-        handle /apps/my-app* {
-            try_files {path} /index.html
-            file_server * {
-                root /srv/dist
-            }
-        }
-    }
-    """
-
-    # Should raise ValueError for any app config with try_files
-    with pytest.raises(ValueError, match="App configuration contains 'try_files'"):
-        validate_app_config(caddyfile_with_try_files)
-
-
-def test_validate_app_config_rejects_rewrite():
-    """Test that validation raises an error if app config contains rewrite."""
-    caddyfile_with_rewrite = """
-    :8000 {
-        handle /apps/my-app* {
-            rewrite / /index.html
-            file_server * {
-                root /srv/dist
-            }
-        }
-    }
-    """
-
-    # Should raise ValueError for any app config with rewrite
-    with pytest.raises(ValueError, match="App configuration contains 'rewrite'"):
-        validate_app_config(caddyfile_with_rewrite)
-
-
-def test_validate_app_config_allows_clean_config():
-    """Test that validation passes if app config has no routing directives."""
-    caddyfile_clean = """
-    :8000 {
-        handle /apps/my-app* {
-            file_server * {
-                root /srv/dist
-            }
-        }
-    }
-    """
-
-    # Should not raise any error
-    validate_app_config(caddyfile_clean)
-
-
-def test_federated_module_generates_config_without_try_files():
-    """Test that app ConfigMaps never contain try_files or rewrite directives."""
-    test_app_name = "rbac"
-    test_app_urls = ["/apps/rbac", "/settings/rbac"]
-
-    # Generate Caddyfile for federated module
-    caddyfile = generate_app_caddyfile(
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-        is_federated=True,
-    )
-
-    # Verify no try_files directives in the output
-    assert "try_files" not in caddyfile, "App ConfigMap should not contain 'try_files' directives"
-
-    # Verify no rewrite directives in the output
-    assert "rewrite" not in caddyfile, "App ConfigMap should not contain 'rewrite' directives"
-
-    # Verify file_server is still present (we still serve static files)
-    assert "file_server" in caddyfile
-
-
-def test_standalone_app_generates_config_without_routing_directives():
-    """Test that standalone apps also don't have try_files/rewrite (proxy handles routing)."""
-    test_app_name = "my-standalone-app"
-    test_app_urls = ["/apps/my-standalone-app"]
-
-    # Generate Caddyfile for standalone app
-    caddyfile = generate_app_caddyfile(
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-        is_federated=False,
-    )
-
-    # Verify no try_files directives (proxy handles routing)
-    assert "try_files" not in caddyfile, "App ConfigMap should not contain 'try_files' directives"
-
-    # Verify no rewrite directives (proxy handles routing)
-    assert "rewrite" not in caddyfile, "App ConfigMap should not contain 'rewrite' directives"
-
-    # Verify file_server is present (we still serve static files)
-    assert "file_server" in caddyfile
-
-
-def test_federated_module_configmap_has_no_routing_directives():
-    """Integration test: Verify app ConfigMap has no try_files or rewrite directives."""
-    test_app_name = "rbac"
-    test_configmap_name = "rbac-federated-caddy"
-    test_app_urls = ["/apps/rbac", "/settings/rbac"]
-
-    # Generate the ConfigMap for a federated module
-    output_path = generate_app_caddy_configmap(
-        configmap_name=test_configmap_name,
-        app_url_value=test_app_urls,
-        app_name=test_app_name,
-        is_federated=True,
-    )
-
-    try:
-        # Verify the output file exists
-        assert os.path.exists(output_path), f"Output file not created at {output_path}"
-
-        # Read and parse the YAML
-        with open(output_path) as f:
-            configmap_content = f.read()
-
-        # Parse YAML
-        configmap = yaml.safe_load(configmap_content)
-        caddyfile_content = configmap["data"]["Caddyfile"]
-
-        # Verify no try_files in the generated config
-        assert "try_files" not in caddyfile_content, (
-            "App ConfigMap should not contain 'try_files' directives"
-        )
-
-        # Verify no rewrite in the generated config
-        assert "rewrite" not in caddyfile_content, (
-            "App ConfigMap should not contain 'rewrite' directives"
-        )
-
-        # Verify routes are still present
-        assert "/apps/rbac" in caddyfile_content
-        assert "/settings/rbac" in caddyfile_content
-
-    finally:
-        # Clean up
-        if os.path.exists(output_path):
-            os.remove(output_path)
