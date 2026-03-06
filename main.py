@@ -4,7 +4,6 @@ import json
 from extraction import (
     get_app_url_from_fec_config,
     get_app_url_from_frontend_yaml,
-    get_chrome_routes_from_frontend_yaml,
     get_module_name_from_frontend_yaml,
     get_proxy_routes_from_frontend_yaml,
     is_federated_module,
@@ -19,7 +18,6 @@ def run_plumber(
     fec_config_path: str = "fec.config.js",
     frontend_yaml_path: str = "deploy/frontend.yaml",
     namespace: str | None = None,
-    stage_env_url: str | None = None,
 ):
     print("Hello from plumber!")
     print(f"App Name (from CLI): {app_name}")
@@ -101,31 +99,12 @@ def run_plumber(
         asset_routes = app_url_value
         print(f"Using all app routes as asset routes: {asset_routes}")
 
-    # Extract Chrome shell routes (bundle mounts and standard Chrome paths)
-    chrome_routes = None
-    try:
-        chrome_routes = get_chrome_routes_from_frontend_yaml(frontend_yaml_path)
-        if chrome_routes:
-            print(f"✓ Extracted Chrome shell routes (for stage env): {chrome_routes}")
-    except (FileNotFoundError, ValueError):
-        print(
-            f"Note: Could not extract Chrome routes from {frontend_yaml_path}, "
-            f"using default Chrome routes"
-        )
-
-    # Use default Chrome routes if extraction failed
-    if not chrome_routes:
-        chrome_routes = ["/apps/chrome", "/", "/index.html"]
-        print(f"Using default Chrome shell routes: {chrome_routes}")
-
-    # Generate proxy Caddy ConfigMap (using asset_routes and chrome_routes)
+    # Generate proxy Caddy ConfigMap (using asset_routes only)
     proxy_configmap_path = generate_proxy_caddy_configmap(
         configmap_name=proxy_configmap_name,
         asset_routes=asset_routes,
-        chrome_routes=chrome_routes,
         app_port=app_port,
         namespace=namespace,
-        stage_env_url=stage_env_url,
     )
     print(f"✓ Generated proxy Caddy ConfigMap: {proxy_configmap_path}")
 
@@ -165,13 +144,6 @@ def main():
         help="Optional Kubernetes namespace for the ConfigMaps",
     )
 
-    parser.add_argument(
-        "--stage-env-url",
-        type=str,
-        default=None,
-        help="Stage environment URL for Chrome shell routes (e.g., https://stage.foo.redhat.com)",
-    )
-
     args = parser.parse_args()
 
     run_plumber(
@@ -181,7 +153,6 @@ def main():
         args.fec_config,
         args.frontend_yaml,
         args.namespace,
-        args.stage_env_url,
     )
 
 
