@@ -38,9 +38,7 @@ def validate_yaml_file(file_path: str) -> None:
 
 def generate_proxy_routes_caddyfile(
     asset_routes: list[str],
-    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
-    stage_env_url: str | None = None,
     template_path: str = "template/proxy_caddy.template.j2",
 ) -> str:
     """
@@ -49,18 +47,11 @@ def generate_proxy_routes_caddyfile(
     Args:
         asset_routes: List of asset paths that route to local app
             (e.g., ["/apps/rbac", "/settings/rbac"])
-        chrome_routes: List of Chrome shell paths that route to stage env
-            (e.g., ["/iam", "/apps/chrome"])
         app_port: Port for the application (default: "8000")
-        stage_env_url: Stage environment URL for Chrome shell routes
-            (e.g., "https://stage.foo.redhat.com"). Required if chrome_routes is not empty.
         template_path: Path to the Jinja2 template (default: "template/proxy_caddy.template.j2")
 
     Returns:
         Caddyfile configuration snippets as a string
-
-    Raises:
-        ValueError: If chrome_routes is provided but stage_env_url is None
     """
     # Set up Jinja2 environment
     template_dir = os.path.dirname(template_path)
@@ -68,23 +59,10 @@ def generate_proxy_routes_caddyfile(
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template(template_file)
 
-    # Default to empty list if no Chrome routes provided
-    if chrome_routes is None:
-        chrome_routes = []
-
-    # Require stage_env_url if we have Chrome routes
-    if chrome_routes and stage_env_url is None:
-        raise ValueError(
-            "stage_env_url is required when chrome_routes are specified. "
-            "Provide a stage environment URL via --stage-env-url argument."
-        )
-
-    # Render the template with both asset and Chrome routes
+    # Render the template with asset routes
     rendered = template.render(
         asset_routes=asset_routes,
-        chrome_routes=chrome_routes,
         app_port=app_port,
-        stage_env_url=stage_env_url,
     )
 
     return rendered
@@ -131,10 +109,8 @@ data:
 def generate_proxy_caddy_configmap(
     configmap_name: str,
     asset_routes: list[str],
-    chrome_routes: list[str] | None = None,
     app_port: str = "8000",
     namespace: str | None = None,
-    stage_env_url: str | None = None,
 ) -> str:
     """
     Generate proxy routes Caddyfile and wrap it in a ConfigMap YAML.
@@ -142,24 +118,16 @@ def generate_proxy_caddy_configmap(
     Args:
         configmap_name: Name for the ConfigMap
         asset_routes: List of asset paths that route to local app
-        chrome_routes: List of Chrome shell paths that route to stage env
         app_port: Port for the application (default: "8000")
         namespace: Optional namespace for the ConfigMap
-        stage_env_url: Stage environment URL for Chrome shell routes.
-            Required if chrome_routes is not empty.
 
     Returns:
         Path to the generated ConfigMap YAML file
-
-    Raises:
-        ValueError: If chrome_routes is provided but stage_env_url is None
     """
     # Generate the proxy routes Caddyfile
     proxy_caddyfile = generate_proxy_routes_caddyfile(
         asset_routes=asset_routes,
-        chrome_routes=chrome_routes,
         app_port=app_port,
-        stage_env_url=stage_env_url,
     )
 
     # Wrap in ConfigMap with "routes" as the data key
